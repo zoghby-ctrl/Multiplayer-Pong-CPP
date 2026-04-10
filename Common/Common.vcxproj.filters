@@ -20,7 +20,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\protocol.h">
+    <ClInclude Include="include\protocol.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

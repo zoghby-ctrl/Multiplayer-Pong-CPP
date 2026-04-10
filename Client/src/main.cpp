@@ -3,6 +3,6 @@
 
 int main()
 {
-    std::cout << "Client scaffold ready.\n";
+    std::cout << "Client running...\n";
     return 0;
 }

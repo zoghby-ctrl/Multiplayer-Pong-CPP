@@ -128,7 +128,7 @@
     <ClCompile Include="Common.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\protocol.h" />
+    <ClInclude Include="include\protocol.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
