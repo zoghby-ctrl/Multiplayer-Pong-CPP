@@ -1,0 +1,16 @@
+# QA Testing Checklist - Multiplayer Pong
+
+## 🟢 Visuals & UI
+- [ ] **Debug Toggle:** Overlay appears/disappears when pressing the toggle key (e.g., F3).
+- [ ] **Performance:** FPS counter reflects real-time performance.
+- [ ] **Sync Info:** Snapshot ID increments consistently during gameplay.
+
+## 🔵 Networking
+- [ ] **Latency:** Ping value is calculated and displayed accurately.
+- [ ] **Prediction:** Check for "jitter" or teleporting when the ball hits a paddle.
+- [ ] **Consistency:** Both clients see the same score at the same time.
+
+## 🔴 Gameplay Mechanics
+- [ ] **Collisions:** Ball bounces correctly off top/bottom walls.
+- [ ] **Win Condition:** Game resets or ends correctly after the score limit is reached.
+- [ ] **Input:** Input display correctly shows which keys are currently held down.
