@@ -3,8 +3,8 @@
 
 using namespace Protocol;
 
+bool ReceivePacket(Packet& p);
 void SendPacketToAll(const Packet& p);
-void ReceivePacket(Packet& p);
 
 int main() {
     GameState global_state{};
@@ -19,11 +19,12 @@ int main() {
 
     while (true) {
         Packet clientPacket{};
-        ReceivePacket(clientPacket);
 
-        if (clientPacket.header.type == PacketType::Input) {
-            global_state.players[0].y += clientPacket.payload.input.up ? -5.0f : 0.0f;
-            global_state.players[0].y += clientPacket.payload.input.down ? 5.0f : 0.0f;
+        if (ReceivePacket(clientPacket)) {
+            if (clientPacket.header.type == PacketType::Input) {
+                global_state.players[0].y += clientPacket.payload.input.up ? -5.0f : 0.0f;
+                global_state.players[0].y += clientPacket.payload.input.down ? 5.0f : 0.0f;
+            }
         }
 
         global_state.ball.x += global_state.ball.vx;
@@ -40,5 +41,8 @@ int main() {
     return 0;
 }
 
+bool ReceivePacket(Packet& p) {
+    return false;
+}
+
 void SendPacketToAll(const Packet& p) {}
-void ReceivePacket(Packet& p) {}
