@@ -4,48 +4,41 @@
 using namespace Protocol;
 
 void SendPacketToAll(const Packet& p);
-bool ReceivePacket(Packet& p);
-
-void update_game_logic(GameState& current_state, const PlayerInput& input, int player_index) {
-    if (input.up)    current_state.players[player_index].y -= 0.1f;
-    if (input.down)  current_state.players[player_index].y += 0.1f;
-    if (input.left)  current_state.players[player_index].x -= 0.1f;
-    if (input.right) current_state.players[player_index].x += 0.1f;
-}
+void ReceivePacket(Packet& p);
 
 int main() {
     GameState global_state{};
-    uint32_t server_seq = 0;
+    global_state.tick = 0;
+
+    global_state.ball.x = 400.0f;
+    global_state.ball.y = 300.0f;
+    global_state.ball.vx = 1.5f;
+    global_state.ball.vy = 1.5f;
 
     std::cout << "Server started..." << std::endl;
 
     while (true) {
-        Packet received_packet{};
+        Packet clientPacket{};
+        ReceivePacket(clientPacket);
 
-        if (ReceivePacket(received_packet)) {
-            if (received_packet.header.type == PacketType::Input) {
-                update_game_logic(global_state, received_packet.payload.input, 0);
-
-                Packet response{};
-                response.header.type = PacketType::State;
-                response.header.seq = server_seq++;
-                response.payload.state = global_state;
-
-                SendPacketToAll(response);
-            }
-            else if (received_packet.header.type == PacketType::Disconnect) {
-                global_state = GameState{};
-                std::cout << "Game Reset" << std::endl;
-            }
+        if (clientPacket.header.type == PacketType::Input) {
+            global_state.players[0].y += clientPacket.payload.input.up ? -5.0f : 0.0f;
+            global_state.players[0].y += clientPacket.payload.input.down ? 5.0f : 0.0f;
         }
 
+        global_state.ball.x += global_state.ball.vx;
+        global_state.ball.y += global_state.ball.vy;
+
+        global_state.tick++;
+
+        Packet statePacket{};
+        statePacket.header.type = PacketType::State;
+        statePacket.payload.state = global_state;
+
+        SendPacketToAll(statePacket);
     }
     return 0;
 }
 
-void SendPacketToAll(const Packet& p) {
-}
-
-bool ReceivePacket(Packet& p) {
-    return false;
-}
+void SendPacketToAll(const Packet& p) {}
+void ReceivePacket(Packet& p) {}

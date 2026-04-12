@@ -1,33 +1,36 @@
 #pragma once
 #include <cstdint>
-namespace Protocol {
-    constexpr int DefaultPort = 7777;
-    constexpr int MAX_PLAYERS = 4;
-
-    enum class PacketType : uint8_t {
-        Unknown = 0,
-        Input = 1,
-        State = 2,
-        Disconnect = 3
-    };
 
 #pragma pack(push, 1)
+namespace Protocol {
 
-    struct PlayerInput {
-        bool up = false;
-        bool down = false;
-        bool left = false;
-        bool right = false;
+    enum class PacketType : uint8_t {
+        Input,
+        State,
+        Disconnect
     };
 
-    struct PlayerState {
-        int32_t id = 0;
-        float x = 0, y = 0;
+    struct PlayerData {
+        float x, y;
+    };
+
+    struct BallData {
+        float x, y;
+        float vx, vy;
+    };
+
+    struct PlayerInput {
+        uint8_t up;
+        uint8_t down;
+        uint8_t left;
+        uint8_t right;
     };
 
     struct GameState {
-        uint32_t tick = 0;
-        PlayerState players[MAX_PLAYERS];
+        uint32_t tick;
+        PlayerData players[2];
+        BallData ball;
+        uint16_t score[2];
     };
 
     struct PacketHeader {
@@ -37,11 +40,11 @@ namespace Protocol {
 
     struct Packet {
         PacketHeader header;
-        union {
+        union Payload {
             PlayerInput input;
             GameState state;
+            Payload() {}
         } payload;
     };
-
-#pragma pack(pop)
 }
+#pragma pack(pop)
