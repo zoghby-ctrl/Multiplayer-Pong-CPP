@@ -22,3 +22,4 @@ public:
 private:
     bool m_visible;
 };
+ 
