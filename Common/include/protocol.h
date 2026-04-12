@@ -1,26 +1,50 @@
 #pragma once
+#include <cstdint>
 
-namespace Protocol
-{
-    constexpr int DefaultPort = 7777;
+#pragma pack(push, 1)
+namespace Protocol {
 
-    enum class PacketType : uint8_t
-    {
-        Unknown = 0,
+    enum class PacketType : uint8_t {
         Input,
-        State
+        State,
+        Disconnect
     };
 
-    struct PlayerInput
-    {
-        bool up = false;
-        bool down = false;
+    struct PlayerData {
+        float x, y;
     };
 
-    struct GameState
-    {
-        float ballX, ballY;
-        float leftPaddleY, rightPaddleY;
-        int leftScore, rightScore;
+    struct BallData {
+        float x, y;
+        float vx, vy;
+    };
+
+    struct PlayerInput {
+        uint8_t up;
+        uint8_t down;
+        uint8_t left;
+        uint8_t right;
+    };
+
+    struct GameState {
+        uint32_t tick;
+        PlayerData players[2];
+        BallData ball;
+        uint16_t score[2];
+    };
+
+    struct PacketHeader {
+        PacketType type;
+        uint32_t seq;
+    };
+
+    struct Packet {
+        PacketHeader header;
+        union Payload {
+            PlayerInput input;
+            GameState state;
+            Payload() {}
+        } payload;
     };
 }
+#pragma pack(pop)
