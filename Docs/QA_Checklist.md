@@ -1,18 +1,18 @@
 # QA Checklist
 
 ## Debug Overlay
-- [ ] FPS يظهر ويتحدث كل ثانية
-- [ ] Ping ظاهر (حتى لو mock)
-- [ ] Snapshot ID بيزيد مع الوقت
-- [ ] Input بيتسجل صح
+- [ ] FPS is displayed and updates every second
+- [ ] Ping is displayed (even if mocked)
+- [ ] Snapshot ID increments over time
+- [ ] Input is captured and displayed correctly
 
 ## Controls
-- [ ] زرار F3 بيعمل Toggle للـ Overlay
-- [ ] مفيش Crash أثناء التشغيل
+- [ ] F3 key toggles the debug overlay on/off
+- [ ] No crashes occur during runtime
 
 ## Performance
-- [ ] البرنامج شغال بسلاسة
-- [ ] مفيش lag من overlay
+- [ ] The application runs smoothly
+- [ ] No noticeable lag caused by the overlay
 
 ## Stability
-- [ ] البرنامج يقفل بـ q بدون مشاكل
+- [ ] The application exits cleanly when pressing 'q'
