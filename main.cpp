@@ -42,7 +42,6 @@ int main() {
         // Input handling
         if (_kbhit()) {
             char key = _getch();
-
             if (key == 'q') break;
 
             if (key == 0 || key == -32) {
@@ -50,7 +49,8 @@ int main() {
                 if (key == 61) { // F3 key
                     debug.Toggle();
                 }
-            } else {
+            }
+            else {
                 lastInput = string(1, key);
             }
         }
