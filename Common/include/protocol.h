@@ -13,8 +13,8 @@ namespace Protocol
 
     struct PlayerInput
     {
-        bool up = false;
-        bool down = false;
+        bool up = false;//0 = the  original state  so it doesnt move when we start game
+        bool down = false;//0 = the  original state so it doesnt move when we start game
     };
 
     struct GameState
