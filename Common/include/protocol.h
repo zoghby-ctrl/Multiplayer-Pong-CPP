@@ -11,26 +11,27 @@ namespace Protocol {
     };
 
     struct PlayerData {
-        float x, y;
+        float x = 0.0f, y = 0.0f;
     };
 
     struct BallData {
-        float x, y;
-        float vx, vy;
+        float x = 0.0f, y = 0.0f;
+        float vx = 0.0f, vy = 0.0f;
     };
 
+    // Compact input (one byte per direction)
     struct PlayerInput {
-        uint8_t up;
-        uint8_t down;
-        uint8_t left;
-        uint8_t right;
+        uint8_t up = 0;
+        uint8_t down = 0;
+        uint8_t left = 0;
+        uint8_t right = 0;
     };
 
     struct GameState {
-        uint32_t tick;
+        uint32_t tick = 0;
         PlayerData players[2];
         BallData ball;
-        uint16_t score[2];
+        uint16_t score[2] = {0, 0};
     };
 
     struct PacketHeader {
