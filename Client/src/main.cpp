@@ -48,8 +48,10 @@ int main() {
             }
         }
     }
+
     return 0;
 }
+
 void RenderHUD(const GameState& state, MatchStatus previousStatus) {
 
    
@@ -107,11 +109,4 @@ void RenderHUD(const GameState& state, MatchStatus previousStatus) {
 
     std::cout << "\n";
     std::cout.flush();   
-}
-
-
-void SendPacketToServer(const Packet& p) {
-}
-bool ReceiveFromServer(Packet& p) {
-    return false; 
 }
