@@ -14,6 +14,7 @@ int main() {
     constexpr auto TickInterval = std::chrono::milliseconds(16);
     constexpr float ArenaWidth = 800.0f;
     constexpr float ArenaHeight = 600.0f;
+    constexpr float BallRadius = 8.0f;
     constexpr float PaddleHalfHeight = 40.0f;
     constexpr float PaddleSpeed = 5.0f;
     constexpr float PaddleMinY = PaddleHalfHeight;
@@ -41,8 +42,8 @@ int main() {
 
         if (ReceivePacket(clientPacket)) {
             if (clientPacket.header.type == PacketType::Input) {
-                const bool move_up = clientPacket.payload.input.up != 0;
-                const bool move_down = clientPacket.payload.input.down != 0;
+                const bool move_up = clientPacket.payload.input.up;
+                const bool move_down = clientPacket.payload.input.down;
                 if (move_up && !move_down) {
                     global_state.players[0].y -= PaddleSpeed;
                 } else if (move_down && !move_up) {
@@ -55,18 +56,18 @@ int main() {
 
         global_state.ball.x += global_state.ball.vx;
         global_state.ball.y += global_state.ball.vy;
-        if (global_state.ball.x < 0.0f) {
-            global_state.ball.x = 0.0f;
+        if (global_state.ball.x < BallRadius) {
+            global_state.ball.x = BallRadius;
             global_state.ball.vx = -global_state.ball.vx;
-        } else if (global_state.ball.x > ArenaWidth) {
-            global_state.ball.x = ArenaWidth;
+        } else if (global_state.ball.x > ArenaWidth - BallRadius) {
+            global_state.ball.x = ArenaWidth - BallRadius;
             global_state.ball.vx = -global_state.ball.vx;
         }
-        if (global_state.ball.y < 0.0f) {
-            global_state.ball.y = 0.0f;
+        if (global_state.ball.y < BallRadius) {
+            global_state.ball.y = BallRadius;
             global_state.ball.vy = -global_state.ball.vy;
-        } else if (global_state.ball.y > ArenaHeight) {
-            global_state.ball.y = ArenaHeight;
+        } else if (global_state.ball.y > ArenaHeight - BallRadius) {
+            global_state.ball.y = ArenaHeight - BallRadius;
             global_state.ball.vy = -global_state.ball.vy;
         }
 
