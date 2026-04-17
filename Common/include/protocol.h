@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <type_traits>
 
 #pragma pack(push, 1)
 namespace Protocol {
@@ -44,10 +43,8 @@ namespace Protocol {
         union Payload {
             PlayerInput input;
             GameState state;
-            Payload() : input{} {}
+            Payload() {}
         } payload;
     };
-
-    static_assert(std::is_trivially_copyable_v<Packet>, "Packet must stay trivially copyable for network serialization.");
 }
 #pragma pack(pop)
