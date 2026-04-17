@@ -120,7 +120,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Zoghby\OneDrive - Egyptian Chinese University (ECU)\Documents\GitHub\Multiplayer-Pong-CPP\Common\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\Common\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
