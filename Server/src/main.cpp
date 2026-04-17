@@ -75,7 +75,7 @@ int main() {
 
         Packet statePacket{};
         statePacket.header.type = PacketType::State;
-        statePacket.header.seq = global_state.tick;
+        statePacket.header.seq = static_cast<uint32_t>(global_state.tick);
         statePacket.payload.state = global_state;
 
         SendPacketToAll(statePacket);

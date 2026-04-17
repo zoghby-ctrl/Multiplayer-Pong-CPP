@@ -8,6 +8,10 @@ using namespace Protocol;
 void SendPacketToServer(const Packet& p);
 bool ReceiveFromServer(Packet& p);
 
+bool IsSequenceNewer(uint32_t incoming, uint32_t reference) {
+    return static_cast<int32_t>(incoming - reference) > 0;
+}
+
 int main() {
     using Clock = std::chrono::steady_clock;
     constexpr auto TickInterval = std::chrono::milliseconds(16);
@@ -29,7 +33,7 @@ int main() {
 
         Packet incomingState{};
         if (ReceiveFromServer(incomingState)) {
-            if (incomingState.header.type == PacketType::State && incomingState.header.seq > last_server_seq) {
+            if (incomingState.header.type == PacketType::State && IsSequenceNewer(incomingState.header.seq, last_server_seq)) {
                 last_server_seq = incomingState.header.seq;
                 
             }
