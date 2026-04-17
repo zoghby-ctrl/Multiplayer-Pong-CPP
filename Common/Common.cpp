@@ -1,9 +1,3 @@
-#pragma once
+#include "include/protocol.h"
 
-#include <iostream>
-#include "protocol.h"
-int main()
-{
-    std::cout << "Hello World!\n";
-}
-
+static_assert(sizeof(Protocol::Packet) > 0, "Protocol packet must be defined");

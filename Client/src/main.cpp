@@ -1,5 +1,7 @@
 #include <iostream>
 #include <string>
+#include <thread>
+#include <chrono>
 #include "../../Common/include/protocol.h"
 
 using namespace Protocol;
@@ -23,7 +25,7 @@ int main() {
     GameState lastState{};
     lastState.status = MatchStatus::WaitingForPlayers;
     MatchStatus previousStatus = MatchStatus::WaitingForPlayers;
- RenderHUD(lastState, previousStatus);
+    RenderHUD(lastState, previousStatus);
     std::cout << "Client started..." << std::endl;
 
     while (true) {
@@ -47,6 +49,8 @@ int main() {
                 RenderHUD(lastState, previousStatus);
             }
         }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
     return 0;
@@ -108,5 +112,37 @@ void RenderHUD(const GameState& state, MatchStatus previousStatus) {
     }
 
     std::cout << "\n";
-    std::cout.flush();   
+    std::cout.flush();
+}
+
+void SendPacketToServer(const Packet& p) {
+    (void)p;
+}
+
+bool ReceiveFromServer(Packet& p) {
+    // Stub timing: increment left/right score every N simulated ticks.
+    constexpr uint32_t kLeftScoreInterval = 120;
+    constexpr uint32_t kRightScoreInterval = 180;
+
+    static uint32_t tick = 0;
+    static uint16_t leftScore = 0;
+    static uint16_t rightScore = 0;
+
+    p.header.type = PacketType::State;
+    p.payload.state.tick = tick++;
+    p.payload.state.status = MatchStatus::InProgress;
+    p.payload.state.score[0] = leftScore;
+    p.payload.state.score[1] = rightScore;
+
+    if (tick % kLeftScoreInterval == 0) {
+        ++leftScore;
+    }
+    if (tick % kRightScoreInterval == 0) {
+        ++rightScore;
+    }
+    if (leftScore >= 5 || rightScore >= 5) {
+        p.payload.state.status = MatchStatus::GameOver;
+    }
+
+    return true;
 }

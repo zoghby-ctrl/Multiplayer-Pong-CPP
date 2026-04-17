@@ -16,7 +16,7 @@ bool DebugOverlay::IsVisible() const {
 void DebugOverlay::Draw(float fps, int ping, int snapshotId, const std::string& input) {
     if (!isVisible) return;
 
-    system("cls"); // يمسح الشاشة (Windows)
+    std::cout << "\033[2J\033[H";
 
     std::cout << "===== DEBUG OVERLAY =====" << std::endl;
     std::cout << "FPS: " << fps << std::endl;
