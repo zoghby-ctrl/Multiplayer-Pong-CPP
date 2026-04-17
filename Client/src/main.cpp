@@ -120,6 +120,10 @@ void SendPacketToServer(const Packet& p) {
 }
 
 bool ReceiveFromServer(Packet& p) {
+    // Stub timing: increment left/right score every N simulated ticks.
+    constexpr uint32_t kLeftScoreInterval = 120;
+    constexpr uint32_t kRightScoreInterval = 180;
+
     static uint32_t tick = 0;
     static uint16_t leftScore = 0;
     static uint16_t rightScore = 0;
@@ -130,10 +134,10 @@ bool ReceiveFromServer(Packet& p) {
     p.payload.state.score[0] = leftScore;
     p.payload.state.score[1] = rightScore;
 
-    if (tick % 120 == 0) {
+    if (tick % kLeftScoreInterval == 0) {
         ++leftScore;
     }
-    if (tick % 180 == 0) {
+    if (tick % kRightScoreInterval == 0) {
         ++rightScore;
     }
     if (leftScore >= 5 || rightScore >= 5) {

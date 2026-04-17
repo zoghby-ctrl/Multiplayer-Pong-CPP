@@ -9,7 +9,6 @@
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
-#include <cstdio>
 #endif
 
 #include "DebugOverlay.h"
@@ -48,12 +47,13 @@ bool TryReadKey(char& key) {
         g_terminalConfigured = true;
     }
 
-    const int value = std::getchar();
-    if (value == EOF) {
+    char readChar = '\0';
+    const ssize_t bytesRead = read(STDIN_FILENO, &readChar, 1);
+    if (bytesRead <= 0) {
         return false;
     }
 
-    key = static_cast<char>(value);
+    key = readChar;
     return true;
 }
 }

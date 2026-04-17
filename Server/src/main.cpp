@@ -14,6 +14,8 @@ int main() {
     constexpr float kArenaHeight = 600.0f;
     constexpr float kPaddleSpeed = 5.0f;
     constexpr float kPaddleHalfHeight = 40.0f;
+    constexpr float kBallSpeedX = 1.5f;
+    constexpr float kBallSpeedY = 1.5f;
 
     GameState global_state{};
     global_state.tick = 0;
@@ -25,8 +27,12 @@ int main() {
 
     global_state.ball.x = 400.0f;
     global_state.ball.y = 300.0f;
-    global_state.ball.vx = 1.5f;
-    global_state.ball.vy = 1.5f;
+    global_state.ball.vx = kBallSpeedX;
+    global_state.ball.vy = kBallSpeedY;
+
+    const auto resetBall = [&global_state](float centerX, float centerY, float speedX, float speedY, float directionX) {
+        global_state.ball = {centerX, centerY, directionX * speedX, speedY};
+    };
 
     std::cout << "Server started..." << std::endl;
 
@@ -50,10 +56,10 @@ int main() {
 
         if (global_state.ball.x < 0.0f) {
             ++global_state.score[1];
-            global_state.ball = {kArenaWidth * 0.5f, kArenaHeight * 0.5f, 1.5f, 1.5f};
+            resetBall(kArenaWidth * 0.5f, kArenaHeight * 0.5f, kBallSpeedX, kBallSpeedY, 1.0f);
         } else if (global_state.ball.x > kArenaWidth) {
             ++global_state.score[0];
-            global_state.ball = {kArenaWidth * 0.5f, kArenaHeight * 0.5f, -1.5f, 1.5f};
+            resetBall(kArenaWidth * 0.5f, kArenaHeight * 0.5f, kBallSpeedX, kBallSpeedY, -1.0f);
         }
 
         if (global_state.score[0] >= 5 || global_state.score[1] >= 5) {
