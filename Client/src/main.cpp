@@ -29,7 +29,7 @@ int main() {
 
         Packet incomingState{};
         if (ReceiveFromServer(incomingState)) {
-            if (incomingState.header.type == PacketType::State && incomingState.header.seq >= last_server_seq) {
+            if (incomingState.header.type == PacketType::State && incomingState.header.seq > last_server_seq) {
                 last_server_seq = incomingState.header.seq;
                 
             }

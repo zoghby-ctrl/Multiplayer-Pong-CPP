@@ -14,9 +14,10 @@ int main() {
     constexpr auto TickInterval = std::chrono::milliseconds(16);
     constexpr float ArenaWidth = 800.0f;
     constexpr float ArenaHeight = 600.0f;
+    constexpr float PaddleHalfHeight = 40.0f;
     constexpr float PaddleSpeed = 5.0f;
-    constexpr float PaddleMinY = 0.0f;
-    constexpr float PaddleMaxY = ArenaHeight;
+    constexpr float PaddleMinY = PaddleHalfHeight;
+    constexpr float PaddleMaxY = ArenaHeight - PaddleHalfHeight;
 
     GameState global_state{};
     global_state.tick = 0;
@@ -47,9 +48,10 @@ int main() {
                 } else if (move_down && !move_up) {
                     global_state.players[0].y += PaddleSpeed;
                 }
-                global_state.players[0].y = std::clamp(global_state.players[0].y, PaddleMinY, PaddleMaxY);
             }
         }
+        global_state.players[0].y = std::clamp(global_state.players[0].y, PaddleMinY, PaddleMaxY);
+        global_state.players[1].y = std::clamp(global_state.players[1].y, PaddleMinY, PaddleMaxY);
 
         global_state.ball.x += global_state.ball.vx;
         global_state.ball.y += global_state.ball.vy;
