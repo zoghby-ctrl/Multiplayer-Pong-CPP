@@ -1,54 +1,112 @@
 #include <iostream>
-#include <Windows.h>   // for GetAsyncKeyState
-#include "..\\..\\Common\\include\\protocol.h"
+#include <string>
+#include "../../Common/include/protocol.h"
 
-using namespace std;
+using namespace Protocol;
 
-int main()
-{
-    cout << "Client running...\n";
-    bool gameRunning = true;
-    int moveDirection = 0; // 0 = no movement
-    Protocol::PlayerInput input{};
+void SendPacketToServer(const Packet& p);
+bool ReceiveFromServer(Packet& p);
+void RenderHUD(const GameState& state, MatchStatus previousStatus);
 
-    DWORD lastSendTime = GetTickCount(); // milliseconds
-    const DWORD sendInterval = 50; // send input every 50 ms
+static const std::string CLEAR_SCREEN   = "\033[2J";
+static const std::string CURSOR_HOME    = "\033[H";
+static const std::string COLOR_RESET    = "\033[0m";
+static const std::string COLOR_YELLOW   = "\033[1;33m";
+static const std::string COLOR_GREEN    = "\033[1;32m";
+static const std::string COLOR_RED      = "\033[1;31m";
+static const std::string COLOR_CYAN     = "\033[1;36m";
+static const std::string COLOR_WHITE    = "\033[1;37m";
 
-    while (gameRunning)
-    {
-        input.up = input.down = input.left = input.right = 0;
+int main() {
+    uint32_t client_seq = 0;
+    
+    GameState lastState{};
+    lastState.status = MatchStatus::WaitingForPlayers;
+    MatchStatus previousStatus = MatchStatus::WaitingForPlayers;
+ RenderHUD(lastState, previousStatus);
+    std::cout << "Client started..." << std::endl;
 
-        // Read input: player 1 uses W/S, player 2 uses Up/Down arrows
-        if ((GetAsyncKeyState('W') & 0x8000) != 0 || (GetAsyncKeyState(VK_UP) & 0x8000) != 0) {
-            input.up = 1;
-        } else if ((GetAsyncKeyState('S') & 0x8000) != 0 || (GetAsyncKeyState(VK_DOWN) & 0x8000) != 0) {
-            input.down = 1;
-        } else if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0) {
-            gameRunning = false;
+    while (true) {
+        Packet inputPacket{};
+        inputPacket.header.type = PacketType::Input;
+        inputPacket.header.seq = client_seq++;
+        inputPacket.payload.input.up = true;
+
+        SendPacketToServer(inputPacket);
+
+        Packet incomingState{};
+        if (ReceiveFromServer(incomingState)) {
+            if (incomingState.header.type == PacketType::State) {
+                
+                previousStatus = lastState.status;
+
+                
+                lastState = incomingState.payload.state;
+
+                
+                RenderHUD(lastState, previousStatus);
+            }
         }
-
-        // Determine movement direction
-        if (input.up && !input.down)
-            moveDirection = 1;
-        else if (input.down && !input.up)
-            moveDirection = -1;
-        else
-            moveDirection = 0;
-
-        // Periodic send logic
-        DWORD currentTime = GetTickCount();
-        if (currentTime - lastSendTime >= sendInterval)
-        {
-            lastSendTime = currentTime;
-            // TODO: send `input` to server here
-        }
-
-        // Debug output
-        cout << "Up: " << (int)input.up << " Down: " << (int)input.down << endl;
-        cout << "moving direction " << moveDirection << endl;
-
-        Sleep(16); // ~60 FPS loop delay for testing
     }
 
     return 0;
+}
+
+void RenderHUD(const GameState& state, MatchStatus previousStatus) {
+
+   
+    std::cout << CLEAR_SCREEN << CURSOR_HOME;
+
+    std::cout << COLOR_WHITE
+              << "==============================\n"
+              << "       SCORE\n"
+              << "  Player 1 : " << COLOR_YELLOW << state.score[0] << COLOR_WHITE
+              << "   |   Player 2 : " << COLOR_YELLOW << state.score[1] << COLOR_WHITE << "\n"
+              << "==============================\n"
+              << COLOR_RESET;
+ 
+    switch (state.status) {
+
+        case MatchStatus::WaitingForPlayers:
+            
+            std::cout << "\n"
+                      << COLOR_CYAN
+                      << "  Waiting for opponent...\n"
+                      << COLOR_RESET;
+            break;
+
+        case MatchStatus::InProgress:
+            
+            if (previousStatus == MatchStatus::WaitingForPlayers) {
+                std::cout << "\n"
+                          << COLOR_GREEN
+                          << "  Connected! Match started.\n"
+                          << COLOR_RESET;
+            } else {
+                std::cout << "\n"
+                          << COLOR_GREEN
+                          << "  Connected  |  Tick: " << state.tick << "\n"
+                          << COLOR_RESET;
+            }
+            break;
+
+        case MatchStatus::GameOver:
+           
+            std::cout << "\n"
+                      << COLOR_RED
+                      << "  *** GAME OVER ***\n"
+                      << COLOR_RESET;
+
+            if (state.score[0] > state.score[1]) {
+                std::cout << COLOR_YELLOW << "  Player 1 wins!\n" << COLOR_RESET;
+            } else if (state.score[1] > state.score[0]) {
+                std::cout << COLOR_YELLOW << "  Player 2 wins!\n" << COLOR_RESET;
+            } else {
+                std::cout << COLOR_YELLOW << "  It's a draw!\n" << COLOR_RESET;
+            }
+            break;
+    }
+
+    std::cout << "\n";
+    std::cout.flush();   
 }

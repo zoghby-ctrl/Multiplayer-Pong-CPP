@@ -4,6 +4,12 @@
 #pragma pack(push, 1)
 namespace Protocol {
 
+    enum class MatchStatus : uint8_t {
+        WaitingForPlayers,
+        InProgress,
+        GameOver
+    };
+
     enum class PacketType : uint8_t {
         Input,
         State,
@@ -32,6 +38,7 @@ namespace Protocol {
         PlayerData players[2];
         BallData ball;
         uint16_t score[2] = {0, 0};
+        MatchStatus status = MatchStatus::WaitingForPlayers;
     };
 
     struct PacketHeader {
