@@ -50,7 +50,7 @@ int main() {
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        std::this_thread::sleep_for(std::chrono::milliseconds(FrameTimeMs));
     }
 
     return 0;
@@ -140,7 +140,7 @@ bool ReceiveFromServer(Packet& p) {
     if (tick % kRightScoreInterval == 0) {
         ++rightScore;
     }
-    if (leftScore >= 5 || rightScore >= 5) {
+    if (leftScore >= WinningScore || rightScore >= WinningScore) {
         p.payload.state.status = MatchStatus::GameOver;
     }
 
