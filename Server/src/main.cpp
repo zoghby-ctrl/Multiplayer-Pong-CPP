@@ -10,25 +10,18 @@ bool ReceivePacket(Packet& p);
 void SendPacketToAll(const Packet& p);
 
 int main() {
-    constexpr float kArenaWidth = 800.0f;
-    constexpr float kArenaHeight = 600.0f;
-    constexpr float kPaddleSpeed = 5.0f;
-    constexpr float kPaddleHalfHeight = 40.0f;
-    constexpr float kBallSpeedX = 1.5f;
-    constexpr float kBallSpeedY = 1.5f;
-
     GameState global_state{};
     global_state.tick = 0;
     global_state.status = MatchStatus::InProgress;
     global_state.players[0].x = 20.0f;
-    global_state.players[1].x = kArenaWidth - 20.0f;
-    global_state.players[0].y = kArenaHeight * 0.5f;
-    global_state.players[1].y = kArenaHeight * 0.5f;
+    global_state.players[1].x = ArenaWidth - 20.0f;
+    global_state.players[0].y = ArenaHeight * 0.5f;
+    global_state.players[1].y = ArenaHeight * 0.5f;
 
-    global_state.ball.x = 400.0f;
-    global_state.ball.y = 300.0f;
-    global_state.ball.vx = kBallSpeedX;
-    global_state.ball.vy = kBallSpeedY;
+    global_state.ball.x = ArenaWidth * 0.5f;
+    global_state.ball.y = ArenaHeight * 0.5f;
+    global_state.ball.vx = BallInitialSpeedX;
+    global_state.ball.vy = BallInitialSpeedY;
 
     const auto resetBall = [&global_state](float centerX, float centerY, float speedX, float speedY, float directionX) {
         global_state.ball = {centerX, centerY, directionX * speedX, speedY};
@@ -41,28 +34,28 @@ int main() {
 
         if (ReceivePacket(clientPacket)) {
             if (clientPacket.header.type == PacketType::Input) {
-                global_state.players[0].y += clientPacket.payload.input.up ? -kPaddleSpeed : 0.0f;
-                global_state.players[0].y += clientPacket.payload.input.down ? kPaddleSpeed : 0.0f;
-                global_state.players[0].y = std::clamp(global_state.players[0].y, kPaddleHalfHeight, kArenaHeight - kPaddleHalfHeight);
+                global_state.players[0].y += clientPacket.payload.input.up ? -PaddleSpeed : 0.0f;
+                global_state.players[0].y += clientPacket.payload.input.down ? PaddleSpeed : 0.0f;
+                global_state.players[0].y = std::clamp(global_state.players[0].y, PaddleHalfHeight, ArenaHeight - PaddleHalfHeight);
             }
         }
 
         global_state.ball.x += global_state.ball.vx;
         global_state.ball.y += global_state.ball.vy;
-        if (global_state.ball.y <= 0.0f || global_state.ball.y >= kArenaHeight) {
+        if (global_state.ball.y <= 0.0f || global_state.ball.y >= ArenaHeight) {
             global_state.ball.vy *= -1.0f;
-            global_state.ball.y = std::clamp(global_state.ball.y, 0.0f, kArenaHeight);
+            global_state.ball.y = std::clamp(global_state.ball.y, 0.0f, ArenaHeight);
         }
 
         if (global_state.ball.x < 0.0f) {
             ++global_state.score[1];
-            resetBall(kArenaWidth * 0.5f, kArenaHeight * 0.5f, kBallSpeedX, kBallSpeedY, 1.0f);
-        } else if (global_state.ball.x > kArenaWidth) {
+            resetBall(ArenaWidth * 0.5f, ArenaHeight * 0.5f, BallInitialSpeedX, BallInitialSpeedY, 1.0f);
+        } else if (global_state.ball.x > ArenaWidth) {
             ++global_state.score[0];
-            resetBall(kArenaWidth * 0.5f, kArenaHeight * 0.5f, kBallSpeedX, kBallSpeedY, -1.0f);
+            resetBall(ArenaWidth * 0.5f, ArenaHeight * 0.5f, BallInitialSpeedX, BallInitialSpeedY, -1.0f);
         }
 
-        if (global_state.score[0] >= 5 || global_state.score[1] >= 5) {
+        if (global_state.score[0] >= WinningScore || global_state.score[1] >= WinningScore) {
             global_state.status = MatchStatus::GameOver;
         }
 
@@ -73,7 +66,7 @@ int main() {
         statePacket.payload.state = global_state;
 
         SendPacketToAll(statePacket);
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        std::this_thread::sleep_for(std::chrono::milliseconds(FrameTimeMs));
     }
     return 0;
 }
