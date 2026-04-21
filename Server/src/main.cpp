@@ -40,20 +40,18 @@ int main() {
 
     std::cout << "Server started..." << std::endl;
 
+    bool hasSecondPlayer = false;
     while (true) {
         Packet clientPacket{};
-        bool hasSecondPlayerInput = false;
 
         if (ReceivePacket(clientPacket)) {
             if (clientPacket.header.type == PacketType::Input) {
+                hasSecondPlayer = true;
                 applyPaddleInput(0, clientPacket.payload.input.up != 0, clientPacket.payload.input.down != 0);
-                hasSecondPlayerInput = (clientPacket.payload.input.left != 0 || clientPacket.payload.input.right != 0);
-                if (hasSecondPlayerInput) {
-                    applyPaddleInput(1, clientPacket.payload.input.left != 0, clientPacket.payload.input.right != 0);
-                }
+                applyPaddleInput(1, clientPacket.payload.input.left != 0, clientPacket.payload.input.right != 0);
             }
         }
-        if (!hasSecondPlayerInput) {
+        if (!hasSecondPlayer) {
             const bool aiUp = global_state.ball.y < (global_state.players[1].y - AiDeadzone);
             const bool aiDown = global_state.ball.y > (global_state.players[1].y + AiDeadzone);
             applyPaddleInput(1, aiUp, aiDown);
