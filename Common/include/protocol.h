@@ -1,31 +1,29 @@
 #pragma once
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>
+#include <cstring>
 
 #pragma pack(push, 1)
 namespace Protocol {
 
-    // -------------------------------------------------------------------------
-    // Shared protocol metadata
-    // -------------------------------------------------------------------------
     constexpr uint16_t ProtocolVersion = 1;
 
-    // -------------------------------------------------------------------------
-    // Shared gameplay/network constants (single source of truth)
-    // -------------------------------------------------------------------------
-    constexpr float ArenaWidth = 800.0f;
-    constexpr float ArenaHeight = 600.0f;
-    constexpr float PaddleSpeed = 5.0f;
-    constexpr float PaddleHalfHeight = 40.0f;
-    constexpr float BallInitialSpeedX = 1.5f;
-    constexpr float BallInitialSpeedY = 1.5f;
+    constexpr float    ArenaWidth = 800.0f;
+    constexpr float    ArenaHeight = 600.0f;
+    constexpr float    PaddleSpeed = 5.0f;
+    constexpr float    PaddleHalfHeight = 40.0f;
+    constexpr float    BallInitialSpeedX = 1.5f;
+    constexpr float    BallInitialSpeedY = 1.5f;
     constexpr uint16_t WinningScore = 5;
     constexpr uint32_t FrameTimeMs = 16;
 
-    // -------------------------------------------------------------------------
-    // Enums
-    // -------------------------------------------------------------------------
     enum class MatchStatus : uint8_t {
         WaitingForPlayers,
         InProgress,
@@ -38,21 +36,15 @@ namespace Protocol {
         Disconnect
     };
 
-    // -------------------------------------------------------------------------
-    // Packet structs
-    // -------------------------------------------------------------------------
-    // Position of a single player paddle in world space.
     struct PlayerData {
         float x = 0.0f, y = 0.0f;
     };
 
-    // Ball position and velocity in world space.
     struct BallData {
         float x = 0.0f, y = 0.0f;
         float vx = 0.0f, vy = 0.0f;
     };
 
-    // Client input snapshot for one simulation tick (1 byte per direction).
     struct PlayerInput {
         uint8_t up = 0;
         uint8_t down = 0;
@@ -60,41 +52,28 @@ namespace Protocol {
         uint8_t right = 0;
     };
 
-    // Authoritative state broadcast from server to clients.
     struct GameState {
-        // Monotonic server simulation tick.
-        uint32_t tick = 0;
-        // Player paddles indexed by player id [0..1].
+        uint32_t   tick = 0;
         PlayerData players[2];
-        // Current ball state.
-        BallData ball;
-        // Scores indexed by player id [0..1].
-        uint16_t score[2] = {0, 0};
-        // Match lifecycle state.
+        BallData   ball;
+        uint16_t   score[2] = { 0, 0 };
         MatchStatus status = MatchStatus::WaitingForPlayers;
     };
 
-    // Common packet header included in all protocol packets.
     struct PacketHeader {
-        // Identifies which payload variant is active.
         PacketType type;
-        // Sender sequence number for ordering/diagnostics.
-        uint32_t seq;
+        uint32_t   seq;
     };
 
-    // Network packet envelope used by both client and server.
     struct Packet {
         PacketHeader header;
         union Payload {
             PlayerInput input;
-            GameState state;
-            Payload() {}
+            GameState   state;
+            Payload() { memset(this, 0, sizeof(*this)); }
         } payload;
     };
 
-    // -------------------------------------------------------------------------
-    // Layout/triviality safeguards for binary compatibility
-    // -------------------------------------------------------------------------
     static_assert(std::is_trivially_copyable_v<PlayerData>, "PlayerData must be trivially copyable");
     static_assert(std::is_trivially_copyable_v<BallData>, "BallData must be trivially copyable");
     static_assert(std::is_trivially_copyable_v<PlayerInput>, "PlayerInput must be trivially copyable");
