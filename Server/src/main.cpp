@@ -81,12 +81,12 @@ int main() {
         if (global_state.ball.vx < 0.0f && collidesWithPaddle(0)) {
             global_state.ball.x = global_state.players[0].x + PaddleHalfWidth + BallRadius;
             global_state.ball.vx = std::abs(global_state.ball.vx);
-            const float normalizedOffset = (global_state.ball.y - global_state.players[0].y) / PaddleHalfHeight;
+            const float normalizedOffset = (global_state.ball.y - global_state.players[0].y) / (PaddleHalfHeight + BallRadius);
             global_state.ball.vy = std::clamp(global_state.ball.vy + normalizedOffset, -MaxBallSpeedY, MaxBallSpeedY);
         } else if (global_state.ball.vx > 0.0f && collidesWithPaddle(1)) {
             global_state.ball.x = global_state.players[1].x - PaddleHalfWidth - BallRadius;
             global_state.ball.vx = -std::abs(global_state.ball.vx);
-            const float normalizedOffset = (global_state.ball.y - global_state.players[1].y) / PaddleHalfHeight;
+            const float normalizedOffset = (global_state.ball.y - global_state.players[1].y) / (PaddleHalfHeight + BallRadius);
             global_state.ball.vy = std::clamp(global_state.ball.vy + normalizedOffset, -MaxBallSpeedY, MaxBallSpeedY);
         }
 
