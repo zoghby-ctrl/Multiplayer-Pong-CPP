@@ -113,9 +113,10 @@ int main() {
         global_state.ball.x += global_state.ball.vx;
         global_state.ball.y += global_state.ball.vy;
 
-        // ✅ الـ } اتحذفت من هنا — كانت بتقفل الـ loop بدري
-        if (global_state.ball.y < 0.0f)         global_state.ball.y = 0.0f;
-        if (global_state.ball.y > ArenaHeight)   global_state.ball.y = ArenaHeight;
+        if (global_state.ball.y <= 0.0f || global_state.ball.y >= ArenaHeight) {
+            global_state.ball.vy *= -1.0f;
+            global_state.ball.y = std::clamp(global_state.ball.y, 0.0f, ArenaHeight);
+        }
 
         if (global_state.ball.x < 0.0f) {
             ++global_state.score[1];
@@ -141,7 +142,7 @@ int main() {
         SendPacketToAll(statePacket);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(FrameTimeMs));
-    } // ✅ دي الـ } الصح اللي بتقفل الـ while
+    }
 
     closesocket(serverSocket);
     WSACleanup();
