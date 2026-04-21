@@ -49,6 +49,8 @@ int main() {
                 hasSecondPlayer = true;
                 applyPaddleInput(0, clientPacket.payload.input.up != 0, clientPacket.payload.input.down != 0);
                 applyPaddleInput(1, clientPacket.payload.input.left != 0, clientPacket.payload.input.right != 0);
+            } else if (clientPacket.header.type == PacketType::Disconnect) {
+                hasSecondPlayer = false;
             }
         }
         if (!hasSecondPlayer) {
