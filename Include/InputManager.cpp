@@ -5,10 +5,12 @@ void InputManager::handleKeyPress(int platformKey) {
     Key key = mapKey(platformKey);
 
     if (key == Key::F3) {
-        toggleOverlayPressed = true;
+        toggleOverlayRequested = true;
     }
 }
 
-bool InputManager::isToggleOverlayPressed() const {
-    return toggleOverlayPressed;
+bool InputManager::consumeToggleOverlayPressed() {
+    const bool wasRequested = toggleOverlayRequested;
+    toggleOverlayRequested = false;
+    return wasRequested;
 }

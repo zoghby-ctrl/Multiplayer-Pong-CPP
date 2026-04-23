@@ -1,3 +1,6 @@
+// Experimental console overlay prototype.
+// This file is retained for reference and is not part of MultiplayerPong.sln.
+
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -73,12 +76,12 @@ int main() {
     auto lastTime = high_resolution_clock::now();
 
     while (true) {
-        // حساب الزمن بين الفريمات
+        // Track elapsed time between frames.
         auto currentTime = high_resolution_clock::now();
         float deltaTime = duration<float>(currentTime - lastTime).count();
         lastTime = currentTime;
 
-        // FPS
+        // Update FPS once per second.
         frameCount++;
         timer += deltaTime;
 
@@ -88,10 +91,10 @@ int main() {
             timer = 0.0f;
         }
 
-        // Snapshot update
+        // Advance a placeholder snapshot counter.
         snapshotId++;
 
-        // Input handling
+        // Poll input for the standalone overlay prototype.
         char key = '\0';
         bool hasKey = false;
 #ifdef _WIN32
@@ -108,12 +111,11 @@ int main() {
 
 #ifdef _WIN32
             if (key == 0 || key == -32) {
-                key = static_cast<char>(_getch()); // special keys
-                if (key == 61) { // F3 key
+                key = static_cast<char>(_getch()); // Special keys.
+                if (key == 61) { // F3 key.
                     debug.Toggle();
                 }
-            }
-            else {
+            } else {
                 lastInput = string(1, key);
             }
 #else
@@ -125,11 +127,11 @@ int main() {
 #endif
         }
 
-        // رسم الـ overlay
+        // Draw the prototype overlay.
         debug.Draw(fps, ping, snapshotId, lastInput);
 
-        // simulate frame time
-        this_thread::sleep_for(milliseconds(16)); // ~60 FPS
+        // Simulate roughly 60 FPS.
+        this_thread::sleep_for(milliseconds(16));
     }
 
     return 0;
