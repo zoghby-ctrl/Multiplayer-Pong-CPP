@@ -23,5 +23,8 @@
     <ClInclude Include="include\protocol.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\GameState.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
