@@ -43,7 +43,7 @@ namespace Protocol {
         union Payload {
             PlayerInput input;
             GameState state;
-            Payload() {}
+            Payload() : input{} {}
         } payload;
     };
 }

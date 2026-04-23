@@ -1,4 +1,4 @@
-#include "InputManager.hpp"
+#include "InputManager.h"
 
 void Game::processEvents() {
     sf::Event event;
