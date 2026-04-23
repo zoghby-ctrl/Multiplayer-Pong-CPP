@@ -40,13 +40,11 @@ namespace Protocol {
 
     struct Packet {
         PacketHeader header;
-
         union Payload {
             PlayerInput input;
             GameState state;
-
-            Payload() : input{} {}
-        } payload; 
+            Payload() {}
+        } payload;
     };
 }
 #pragma pack(pop)
