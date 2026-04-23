@@ -1,156 +1,196 @@
+#include <chrono>
+#include <cstdint>
 #include <iostream>
-#include <Windows.h>   // for GetAsyncKeyState
+#include <string>
+#include <thread>
+
 #include "../../Common/include/protocol.h"
-using namespace std;
-enum class MatchState {
-    WAITING,
-    IN_PROGRESS,
-    GAME_OVER,
-    RESET
+
+namespace {
+using namespace Protocol;
+
+constexpr const char* kClearScreen = "\033[2J";
+constexpr const char* kCursorHome = "\033[H";
+constexpr const char* kColorReset = "\033[0m";
+constexpr const char* kColorYellow = "\033[1;33m";
+constexpr const char* kColorGreen = "\033[1;32m";
+constexpr const char* kColorRed = "\033[1;31m";
+constexpr const char* kColorCyan = "\033[1;36m";
+constexpr const char* kColorWhite = "\033[1;37m";
+
+constexpr uint32_t kWaitingTicks = 90;
+constexpr uint32_t kLeftScoreInterval = 120;
+constexpr uint32_t kRightScoreInterval = 180;
+
+struct DemoStateFeed {
+    uint32_t tick = 0;
+    uint16_t leftScore = 0;
+    uint16_t rightScore = 0;
 };
 
+Packet BuildNeutralInputPacket(uint32_t sequence) {
+    Packet packet{};
+    packet.header.type = PacketType::Input;
+    packet.header.seq = sequence;
+    return packet;
+}
 
-int main()
-{
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    MatchState state = MatchState::WAITING; // always initialize 
+void SendPacketToServer(const Packet& packet) {
+    // Transport is stubbed for now; keep the call site explicit so a real
+    // networking layer can replace this without reshaping the client loop.
+    (void)packet;
+}
 
-    // MAKES THE GAME ALWAYS IN STANDBY MODE 
-    //state = MatchState::GAME_OVER; syntax is differ from the the OG class
-    
-    const int WIN_SCORE = 5;// the score from 5
-    ///////////////////////////////////////////////////////////////////////////////////////////
-  cout << "Client running...\n";
-    bool gameRunning = true;
-    int moveDirection = 0; // the player idle state or no movement
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    Protocol::PlayerInput input;
-    Protocol::GameState SCORE_OF_GAME;
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    DWORD lastSendTime = GetTickCount();//gives current time in milliseconds --> THE GEtTICKCOUNT (premade)
-    const DWORD sendInterval = 50; // البرنامج بيقرأ الزرار فورًا بدون تأخير 
-    // THATS THE DELAY TO THE SERVER  
+PlayerData MakePlayer(float x, float y) {
+    PlayerData player{};
+    player.x = x;
+    player.y = y;
+    return player;
+}
 
-    while (gameRunning)
-    {
-        if (state == MatchState::IN_PROGRESS) {
-            input.up = false;
-            input.down = false;
-            // so to refresh the keyboard input , good for best performance
-            if (input.up = (GetAsyncKeyState('W') & 0x8000) != 0 || (GetAsyncKeyState(VK_UP) & 0x8000)) {
+BallData MakeBall(float x, float y, float vx, float vy) {
+    BallData ball{};
+    ball.x = x;
+    ball.y = y;
+    ball.vx = vx;
+    ball.vy = vy;
+    return ball;
+}
 
-                input.up = true;
-
-            }
-            /* if pressed w we have to add hexadecimal  called holding behavior there is another code as & 0x0001
-            and if we didnt add it , it may act weird
-            */
-            else if (input.down = (GetAsyncKeyState('S') & 0x8000) != 0 || (GetAsyncKeyState(VK_DOWN) & 0x8000)) {
-
-                input.down = true;
-
-
-            }
-            else if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0) {
-
-                gameRunning = false;
-            }
-
-            // read keyboard & send input
-            
-        }
-        else if (state == MatchState::WAITING) {
-            cout << "Waiting for opponent...\n";
-        }
-        else if (state == MatchState::GAME_OVER) {
-            cout << "Game Over! Score: " << SCORE_OF_GAME.leftScore << "\n";
-            cout << "Game Over! Score: " << SCORE_OF_GAME.rightScore << "\n";
-            cout << "Press R to play again or ESC to quit\n";
-
-            if ((GetAsyncKeyState('R') & 0x8000) != 0)
-            {
-                // tell server this player wants a rematch
-
-                state = MatchState::RESET;
-                // GO TO LINE (state == MatchState::RESET)
-            }
-            else if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0)
-            {
-                gameRunning = false;
-            }
-            // wait for RESET signal from server
-        }
-     
-        else if (state == MatchState::RESET)
-        {
-            // clear scores and positions locally
-            SCORE_OF_GAME.leftScore = 0;
-            SCORE_OF_GAME.rightScore = 0;
-            moveDirection = 0;
-            input.up = false;
-            input.down = false;
-            // مفيش حركه فوق او تحت كله ثابت حتى بدايه القيم الجاي
-
-            cout << "Restarting...\n";
-
-            state = MatchState::WAITING;
-        }
-      
-
-        // direction 
-
-        if (input.up == true && input.down == false)
-        {
-            moveDirection = 1;   // move up
-        }
-        else if (input.down == true && input.up == false)
-        {
-            moveDirection = -1;  // move down
-        }
-        else
-        {
-            moveDirection = 0;   // no movement
-        }
-
-        // step 3: send input every 50 ms
-        DWORD currentTime = GetTickCount();
-
-        if (currentTime - lastSendTime >= sendInterval)
-        {
-            lastSendTime = currentTime;
-        }
-
-        /* Purpose of this whole thing
-
- To control how often you send input to the server*/
-        //////////////////////////////
-        // 🔹 Print to test
-        cout << "Up: " << input.up << " Down: " << input.down << endl;
-        cout << "moving direction "<< moveDirection;
-        Sleep(16); // slow down output (just for testing)
+MatchStatus DetermineMatchStatus(const DemoStateFeed& feed) {
+    if (feed.leftScore >= WinningScore || feed.rightScore >= WinningScore) {
+        return MatchStatus::GameOver;
     }
-      
-        // 1) read keyboard تم
-        // 2) update paddle movement immediately تم
-        // 3) every fixed interval, send input state to server
-        // 4) render
-        // 
-        // 
-        //player 1 uses W/S
-        //player 2 uses ↑ / ↓
-   
 
+    if (feed.tick < kWaitingTicks) {
+        return MatchStatus::WaitingForPlayers;
+    }
+
+    return MatchStatus::InProgress;
+}
+
+GameState BuildDemoState(const DemoStateFeed& feed) {
+    GameState state{};
+    state.tick = feed.tick;
+    state.players[0] = MakePlayer(20.0f, ArenaHeight * 0.5f);
+    state.players[1] = MakePlayer(ArenaWidth - 20.0f, ArenaHeight * 0.5f);
+    state.ball = MakeBall(ArenaWidth * 0.5f, ArenaHeight * 0.5f, 0.0f, 0.0f);
+    state.score[0] = feed.leftScore;
+    state.score[1] = feed.rightScore;
+    state.status = DetermineMatchStatus(feed);
+    return state;
+}
+
+void AdvanceDemoFeed(DemoStateFeed& feed) {
+    if (DetermineMatchStatus(feed) == MatchStatus::GameOver) {
+        return;
+    }
+
+    ++feed.tick;
+
+    if (feed.tick < kWaitingTicks) {
+        return;
+    }
+
+    if (feed.tick % kLeftScoreInterval == 0 && feed.leftScore < WinningScore) {
+        ++feed.leftScore;
+    }
+
+    if (feed.tick % kRightScoreInterval == 0 && feed.rightScore < WinningScore) {
+        ++feed.rightScore;
+    }
+}
+
+bool ReceiveFromServer(Packet& packet) {
+    static DemoStateFeed demoFeed{};
+
+    packet = {};
+    packet.header.type = PacketType::State;
+    packet.header.seq = demoFeed.tick;
+    packet.payload.state = BuildDemoState(demoFeed);
+
+    AdvanceDemoFeed(demoFeed);
+    return true;
+}
+
+void PrintScoreboard(const GameState& state) {
+    std::cout << kColorWhite
+              << "==============================\n"
+              << "        SCOREBOARD\n"
+              << "  Player 1 : " << kColorYellow << state.score[0] << kColorWhite
+              << "   |   Player 2 : " << kColorYellow << state.score[1] << kColorWhite << "\n"
+              << "==============================\n"
+              << kColorReset;
+}
+
+void PrintStatusLine(const GameState& state, MatchStatus previousStatus) {
+    switch (state.status) {
+        case MatchStatus::WaitingForPlayers:
+            std::cout << "\n"
+                      << kColorCyan
+                      << "  Demo transport active. Waiting for a remote player.\n"
+                      << kColorReset;
+            break;
+
+        case MatchStatus::InProgress:
+            std::cout << "\n"
+                      << kColorGreen;
+
+            if (previousStatus == MatchStatus::WaitingForPlayers) {
+                std::cout << "  Demo match started. Rendering scripted server state.\n";
+            } else {
+                std::cout << "  Demo match in progress  |  Tick: " << state.tick << "\n";
+            }
+
+            std::cout << kColorReset;
+            break;
+
+        case MatchStatus::GameOver:
+            std::cout << "\n"
+                      << kColorRed
+                      << "  *** DEMO ROUND COMPLETE ***\n"
+                      << kColorReset;
+
+            if (state.score[0] > state.score[1]) {
+                std::cout << kColorYellow << "  Player 1 wins the scripted round.\n" << kColorReset;
+            } else if (state.score[1] > state.score[0]) {
+                std::cout << kColorYellow << "  Player 2 wins the scripted round.\n" << kColorReset;
+            } else {
+                std::cout << kColorYellow << "  The scripted round ended in a draw.\n" << kColorReset;
+            }
+            break;
+    }
+}
+
+void RenderHud(const GameState& state, MatchStatus previousStatus) {
+    std::cout << kClearScreen << kCursorHome;
+    PrintScoreboard(state);
+    PrintStatusLine(state, previousStatus);
+    std::cout << "\n";
+    std::cout.flush();
+}
+}
+
+int main() {
+    uint32_t nextClientSequence = 0;
+    GameState lastState{};
+    lastState.status = MatchStatus::WaitingForPlayers;
+
+    RenderHud(lastState, lastState.status);
+    std::cout << "Client demo started (transport stub; no live network)." << std::endl;
+
+    while (true) {
+        SendPacketToServer(BuildNeutralInputPacket(nextClientSequence++));
+
+        Packet incomingState{};
+        if (ReceiveFromServer(incomingState) && incomingState.header.type == PacketType::State) {
+            const MatchStatus previousStatus = lastState.status;
+            lastState = incomingState.payload.state;
+            RenderHud(lastState, previousStatus);
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(FrameTimeMs));
+    }
 
     return 0;
 }
-
-
-
-
-
-/*GetTickCount()
-
-returns time in milliseconds
-
-DWORD ≈ unsigned int
-*/
