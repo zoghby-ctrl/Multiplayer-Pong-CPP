@@ -4,8 +4,8 @@
 class InputManager {
 public:
     void handleKeyPress(int platformKey);
-    bool isToggleOverlayPressed() const;
+    bool consumeToggleOverlayPressed();
 
 private:
-    bool toggleOverlayPressed = false;
+    bool toggleOverlayRequested = false;
 };

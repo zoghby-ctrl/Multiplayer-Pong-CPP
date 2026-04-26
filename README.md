@@ -2,6 +2,8 @@
 
 A collaborative C++ client-server Pong project with shared protocol definitions for multiplayer gameplay.
 
+The canonical entrypoint for active development is `MultiplayerPong/MultiplayerPong.sln`.
+
 ## Project Overview
 
 The repository is split into three core modules:
@@ -9,6 +11,33 @@ The repository is split into three core modules:
 - **Client** (`/Client`): handles presentation, HUD rendering, and client-side input/network flow.
 - **Server** (`/Server`): runs authoritative game simulation, ball/paddle updates, and scoring.
 - **Common** (`/Common`): contains shared protocol/data structures used by both client and server (`Common/include/protocol.h`).
+
+## Current Active State
+
+The active solution currently demonstrates:
+
+- shared packet/types in `Common`
+- a console client HUD that renders a scripted server-state feed
+- a local server simulation with AI fallback for paddle two
+
+The active `Client` and `Server` projects still use transport stubs. Real socket networking is not implemented in this repo revision yet.
+
+## Active vs Experimental
+
+### Active code
+
+- `MultiplayerPong/MultiplayerPong.sln`
+- `Client/`
+- `Server/`
+- `Common/`
+- `Docs/`
+
+### Experimental or reference-only code
+
+- Root-level `main.cpp`, `Game.cpp`, `DebugOverlay.*`, and `Include/*`
+- `Solution1/`
+
+These paths are kept for reference or prototyping and are not part of the primary `MultiplayerPong.sln` build.
 
 ## Prerequisites
 
@@ -71,19 +100,30 @@ Start the server first, then the client.
   - right-click **Client** -> **Debug -> Start New Instance**, or
   - stop and switch startup project to **Client**, then run.
 
-This order helps ensure the client can connect once the server is already running.
+This order matches the intended future network flow and keeps the current demo startup sequence consistent.
 
-## Controls
+### What to expect from the active solution
 
-- **F3**: Toggle debug overlay (FPS, ping, snapshot information)
-- **Q**: Quit/close the running console app
+- `Server` runs the authoritative Pong simulation.
+- When no second player input is available, the server uses AI fallback for paddle two.
+- `Client` renders a demo HUD and consumes a scripted state feed while transport is stubbed.
+
+## Prototype Controls
+
+The standalone root-level prototype (`main.cpp`) supports:
+
+- **F3**: Toggle the experimental debug overlay
+- **Q**: Quit the experimental overlay demo
 
 ## Repository Structure
 
-- `/Client` - client executable/project and source
-- `/Server` - server executable/project and source
+- `/MultiplayerPong` - canonical Visual Studio solution for active development
+- `/Client` - active client project and source
+- `/Server` - active server project and source
 - `/Common` - shared protocol definitions and common code
 - `/Docs` - architecture and QA documentation
+- Root-level `.cpp/.h` files - experimental prototypes kept for reference
+- `/Solution1` - placeholder Visual Studio starter projects, not part of the main build
 
 ## Troubleshooting
 
@@ -91,6 +131,9 @@ This order helps ensure the client can connect once the server is already runnin
 - `**protocol.h` not found**:
   - Verify include path points to `Common/include`.
   - In Visual Studio: **Project Properties -> C/C++ -> General -> Additional Include Directories** should include `..\\..\\Common\\include` for Client/Server projects.
+- **Server/client appear local-only**:
+  - That is expected in the current active solution.
+  - The transport layer is stubbed; the projects currently demonstrate structure and simulation flow rather than live network play.
 
 ## Screenshots
 
