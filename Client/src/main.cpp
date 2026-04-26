@@ -22,6 +22,15 @@ constexpr float kBallRadius = 8.0f;
 constexpr float kDigitWidth = 26.0f;
 constexpr float kDigitHeight = 48.0f;
 constexpr float kDigitThickness = 6.0f;
+constexpr int kBallCircleSegments = 24;
+constexpr float kPi = 3.14159265358979323846f;
+constexpr float kBallCircleSegmentAngle = (2.0f * kPi) / static_cast<float>(kBallCircleSegments);
+
+#ifdef _WIN32
+#define CLIENT_UNUSED
+#else
+#define CLIENT_UNUSED [[maybe_unused]]
+#endif
 
 struct DemoStateFeed {
     GameState state{};
@@ -111,7 +120,7 @@ void AdvanceDemoState(DemoStateFeed& feed) {
     }
 }
 
-[[maybe_unused]] Packet BuildInputPacket(uint32_t sequence) {
+CLIENT_UNUSED Packet BuildInputPacket(uint32_t sequence) {
     Packet packet{};
     packet.header.type = PacketType::Input;
     packet.header.seq = sequence;
@@ -126,11 +135,11 @@ void AdvanceDemoState(DemoStateFeed& feed) {
     return packet;
 }
 
-[[maybe_unused]] void SendPacketToServer(const Packet& packet) {
+CLIENT_UNUSED void SendPacketToServer(const Packet& packet) {
     (void)packet;
 }
 
-[[maybe_unused]] bool ReceiveFromServer(Packet& packet) {
+CLIENT_UNUSED bool ReceiveFromServer(Packet& packet) {
     static DemoStateFeed demoFeed{CreateInitialDemoState()};
 
     packet = {};
@@ -308,8 +317,8 @@ private:
         glColor3f(1.0f, 0.78f, 0.18f);
         glBegin(GL_TRIANGLE_FAN);
         glVertex2f(ball.x, ball.y);
-        for (int i = 0; i <= 24; ++i) {
-            const float angle = static_cast<float>(i) * 0.261799f;
+        for (int i = 0; i <= kBallCircleSegments; ++i) {
+            const float angle = static_cast<float>(i) * kBallCircleSegmentAngle;
             glVertex2f(ball.x + std::cos(angle) * kBallRadius, ball.y + std::sin(angle) * kBallRadius);
         }
         glEnd();
@@ -320,6 +329,7 @@ private:
     }
 
     static void DrawDigit(int digit, float x, float y, float scale) {
+        // Segment order: top, top-left, top-right, middle, bottom-left, bottom-right, bottom.
         static constexpr std::array<std::array<bool, 7>, 10> kSegments = {{
             {{true, true, true, false, true, true, true}},
             {{false, false, true, false, false, true, false}},
@@ -353,11 +363,21 @@ private:
         if (seg[6]) DrawSegment(x + t, bottomY, w - (2.0f * t), t);
     }
 
+    static void DrawScoreValue(uint16_t score, float centerX, float y) {
+        score = std::min<uint16_t>(score, 99);
+        if (score >= 10) {
+            DrawDigit((score / 10) % 10, centerX - kDigitWidth - 6.0f, y, 1.0f);
+            DrawDigit(score % 10, centerX + 6.0f, y, 1.0f);
+        } else {
+            DrawDigit(score, centerX - (kDigitWidth * 0.5f), y, 1.0f);
+        }
+    }
+
     static void DrawScore(uint16_t leftScore, uint16_t rightScore) {
         glColor3f(0.45f, 0.94f, 0.88f);
         const float y = 20.0f;
-        DrawDigit(leftScore % 10, (ArenaWidth * 0.5f) - 90.0f, y, 1.0f);
-        DrawDigit(rightScore % 10, (ArenaWidth * 0.5f) + 64.0f, y, 1.0f);
+        DrawScoreValue(leftScore, (ArenaWidth * 0.5f) - 86.0f, y);
+        DrawScoreValue(rightScore, (ArenaWidth * 0.5f) + 86.0f, y);
         DrawRect((ArenaWidth * 0.5f) - 8.0f, y + 16.0f, (ArenaWidth * 0.5f) + 8.0f, y + 22.0f);
         DrawRect((ArenaWidth * 0.5f) - 8.0f, y + 30.0f, (ArenaWidth * 0.5f) + 8.0f, y + 36.0f);
     }
