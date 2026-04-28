@@ -340,8 +340,15 @@ ConnectionResult WaitForConnection(const SessionConfig& config) {
         return {false, "Invalid IP address. Use format ###.###.###.###."};
     }
 
-    const uint32_t connectTicks =
-        config.role == SessionRole::Host ? kHostJoinTicks : kJoinConnectTicks;
+    bool autoConnect = true;
+    if (config.role == SessionRole::Join &&
+        (config.address == "0.0.0.0" || config.address == "255.255.255.255")) {
+        autoConnect = false;
+    }
+
+    const uint32_t connectTicks = autoConnect
+        ? (config.role == SessionRole::Host ? kHostJoinTicks : kJoinConnectTicks)
+        : (kConnectionTimeoutTicks + 1);
 
     for (uint32_t tick = 0; tick <= kConnectionTimeoutTicks; ++tick) {
         RenderWaitingScreen(config, tick);
