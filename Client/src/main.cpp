@@ -101,6 +101,10 @@ bool IsValidIpv4(const std::string& address) {
     return stream.rdbuf()->in_avail() == 0;
 }
 
+bool IsReservedJoinAddress(const std::string& address) {
+    return address == "0.0.0.0" || address == "255.255.255.255";
+}
+
 Packet BuildNeutralInputPacket(uint32_t sequence) {
     Packet packet{};
     packet.header.type = PacketType::Input;
@@ -337,18 +341,16 @@ void WaitForEnter() {
 
 ConnectionResult WaitForConnection(const SessionConfig& config) {
     if (config.role == SessionRole::Join && !IsValidIpv4(config.address)) {
-        return {false, "Invalid IP address. Use format ###.###.###.###."};
+        return {false, "Invalid IP address. Use format 0-255.0-255.0-255.0-255 (e.g. 192.168.1.10)."};
     }
 
-    bool autoConnect = true;
-    if (config.role == SessionRole::Join &&
-        (config.address == "0.0.0.0" || config.address == "255.255.255.255")) {
-        autoConnect = false;
-    }
+    const bool autoConnect =
+        !(config.role == SessionRole::Join && IsReservedJoinAddress(config.address));
+    const uint32_t unreachableConnectTicks = kConnectionTimeoutTicks + 1;
 
     const uint32_t connectTicks = autoConnect
         ? (config.role == SessionRole::Host ? kHostJoinTicks : kJoinConnectTicks)
-        : (kConnectionTimeoutTicks + 1);
+        : unreachableConnectTicks;
 
     for (uint32_t tick = 0; tick <= kConnectionTimeoutTicks; ++tick) {
         RenderWaitingScreen(config, tick);
