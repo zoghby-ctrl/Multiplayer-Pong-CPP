@@ -3,64 +3,256 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h> // for Sleep
-#include <cstdint>   // for uint8_t
-#include "../../Common/include/protocol.h"
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <iostream>
+#include <thread>
+
+#include "../../Common/include/protocol.h"
 
 #pragma comment(lib, "ws2_32.lib")
 
-using namespace std;
+namespace {
+    using namespace Protocol;
 
-enum class MatchState
-{
-    WAITING,
-    IN_PROGRESS,
-    GAME_OVER,
-    RESET
-};
+    constexpr float kPaddleHalfWidth = 10.0f;
+    constexpr float kBallRadius = 8.0f;
+    constexpr float kMaxBallSpeedY = 5.0f;
+    constexpr float kAiDeadzone = 6.0f;
+    constexpr float kLeftPaddleX = 20.0f;
+    constexpr float kRightPaddleX = ArenaWidth - 20.0f;
 
-int main()
-{
-    ///////////////////////////////////////////////////////////////////////////////////////////
+    // TCP client socket — set in main() after accept()
+    SOCKET g_clientSocket = INVALID_SOCKET;
+    bool g_clientDisconnected = false;
 
-    MatchState state = MatchState::WAITING; // always initialize
+    // Real TCP receive: returns true when a complete Packet was received.
+    bool ReceivePacket(Packet& packet) {
+        packet = {};
+        int bytesReceived = recv(
+            g_clientSocket,
+            reinterpret_cast<char*>(&packet),
+            sizeof(packet),
+            0
+        );
+        if (bytesReceived == static_cast<int>(sizeof(packet))) {
+            return true;
+        }
+        if (bytesReceived == 0) {
+            std::cout << "Client disconnected\n";
+            g_clientDisconnected = true;
+        } else if (bytesReceived == SOCKET_ERROR) {
+            int error = WSAGetLastError();
+            // WSAEWOULDBLOCK is normal on a non-blocking socket with no data.
+            if (error != WSAEWOULDBLOCK) {
+                std::cout << "recv failed. Error: " << error << "\n";
+                g_clientDisconnected = true;
+            }
+        }
+        return false;
+    }
 
-    // MAKES THE GAME ALWAYS IN STANDBY MODE
-    // state = MatchState::GAME_OVER; syntax is different from the OG class
+    // Real TCP send: broadcasts the packet to the connected client.
+    void SendPacketToAll(const Packet& packet) {
+        int bytesSent = send(
+            g_clientSocket,
+            reinterpret_cast<const char*>(&packet),
+            sizeof(packet),
+            0
+        );
+        if (bytesSent == SOCKET_ERROR) {
+            int error = WSAGetLastError();
+            // WSAEWOULDBLOCK is normal on a non-blocking socket.
+            if (error != WSAEWOULDBLOCK) {
+                std::cout << "send failed. Error: " << error << "\n";
+                g_clientDisconnected = true;
+            }
+        }
+    }
 
-    const int WIN_SCORE = 5; // the score from 5
+    GameState CreateInitialGameState() {
+        GameState state{};
+        state.status = MatchStatus::InProgress;
+        state.players[0].x = kLeftPaddleX;
+        state.players[1].x = kRightPaddleX;
+        state.players[0].y = ArenaHeight * 0.5f;
+        state.players[1].y = ArenaHeight * 0.5f;
+        state.ball.x = ArenaWidth * 0.5f;
+        state.ball.y = ArenaHeight * 0.5f;
+        state.ball.vx = BallInitialSpeedX;
+        state.ball.vy = BallInitialSpeedY;
+        return state;
+    }
 
-    ///////////////////////////////////////////////////////////////////////////////////////////
+    bool IsGameOver(const GameState& state) {
+        return state.status == MatchStatus::GameOver;
+    }
 
-    cout << "Server running...\n";
+    void ResetBall(GameState& state, float directionX) {
+        state.ball.x = ArenaWidth * 0.5f;
+        state.ball.y = ArenaHeight * 0.5f;
+        state.ball.vx = directionX * BallInitialSpeedX;
+        state.ball.vy = BallInitialSpeedY;
+    }
 
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    // TCP NETWORKING STARTS HERE
+    void ApplyPaddleInput(GameState& state, std::size_t playerIndex, bool up, bool down) {
+        float deltaY = 0.0f;
+        if (up != down) {
+            deltaY = up ? -PaddleSpeed : PaddleSpeed;
+        }
+
+        state.players[playerIndex].y += deltaY;
+        state.players[playerIndex].y = std::clamp(
+            state.players[playerIndex].y,
+            PaddleHalfHeight,
+            ArenaHeight - PaddleHalfHeight
+        );
+    }
+
+    bool ClientControlsSecondPaddle(const Packet& packet) {
+        return packet.payload.input.left != 0 || packet.payload.input.right != 0;
+    }
+
+    void HandleClientPacket(GameState& state, const Packet& packet, bool& hasSecondPlayer) {
+        if (packet.header.type == PacketType::Disconnect) {
+            hasSecondPlayer = false;
+            return;
+        }
+
+        if (packet.header.type != PacketType::Input) {
+            return;
+        }
+
+        ApplyPaddleInput(state, 0, packet.payload.input.up != 0, packet.payload.input.down != 0);
+
+        if (ClientControlsSecondPaddle(packet)) {
+            hasSecondPlayer = true;
+            ApplyPaddleInput(state, 1, packet.payload.input.left != 0, packet.payload.input.right != 0);
+        }
+    }
+
+    void ApplyFallbackAi(GameState& state, bool hasSecondPlayer) {
+        if (hasSecondPlayer) {
+            return;
+        }
+
+        const bool aiUp = state.ball.y < (state.players[1].y - kAiDeadzone);
+        const bool aiDown = state.ball.y > (state.players[1].y + kAiDeadzone);
+        ApplyPaddleInput(state, 1, aiUp, aiDown);
+    }
+
+    void AdvanceBall(GameState& state) {
+        state.ball.x += state.ball.vx;
+        state.ball.y += state.ball.vy;
+
+        if (state.ball.y <= kBallRadius || state.ball.y >= ArenaHeight - kBallRadius) {
+            state.ball.vy *= -1.0f;
+            state.ball.y = std::clamp(state.ball.y, kBallRadius, ArenaHeight - kBallRadius);
+        }
+    }
+
+    bool CollidesWithPaddle(const GameState& state, std::size_t playerIndex) {
+        const float paddleLeft = state.players[playerIndex].x - kPaddleHalfWidth;
+        const float paddleRight = state.players[playerIndex].x + kPaddleHalfWidth;
+        const float paddleTop = state.players[playerIndex].y - PaddleHalfHeight;
+        const float paddleBottom = state.players[playerIndex].y + PaddleHalfHeight;
+
+        return state.ball.x + kBallRadius >= paddleLeft &&
+            state.ball.x - kBallRadius <= paddleRight &&
+            state.ball.y + kBallRadius >= paddleTop &&
+            state.ball.y - kBallRadius <= paddleBottom;
+    }
+
+    void BounceOffPaddle(GameState& state, std::size_t playerIndex) {
+        const float paddleDirection = playerIndex == 0 ? 1.0f : -1.0f;
+        const float paddleSurface = state.players[playerIndex].x + (paddleDirection * kPaddleHalfWidth);
+        const float normalizedOffset =
+            (state.ball.y - state.players[playerIndex].y) / (PaddleHalfHeight + kBallRadius);
+
+        state.ball.x = paddleSurface + (paddleDirection * kBallRadius);
+        state.ball.vx = paddleDirection * std::abs(state.ball.vx);
+        state.ball.vy = std::clamp(state.ball.vy + normalizedOffset, -kMaxBallSpeedY, kMaxBallSpeedY);
+    }
+
+    void HandlePaddleCollisions(GameState& state) {
+        if (state.ball.vx < 0.0f && CollidesWithPaddle(state, 0)) {
+            BounceOffPaddle(state, 0);
+        }
+        else if (state.ball.vx > 0.0f && CollidesWithPaddle(state, 1)) {
+            BounceOffPaddle(state, 1);
+        }
+    }
+
+    void HandleScoring(GameState& state) {
+        if (state.ball.x + kBallRadius < 0.0f) {
+            ++state.score[1];
+            ResetBall(state, 1.0f);
+        }
+        else if (state.ball.x - kBallRadius > ArenaWidth) {
+            ++state.score[0];
+            ResetBall(state, -1.0f);
+        }
+
+        if (state.score[0] >= WinningScore || state.score[1] >= WinningScore) {
+            state.status = MatchStatus::GameOver;
+        }
+    }
+
+    Packet BuildStatePacket(const GameState& state, uint32_t sequence) {
+        Packet packet{};
+        packet.header.type = PacketType::State;
+        packet.header.seq = sequence;
+        packet.payload.state = state;
+        return packet;
+    }
+
+    bool ServerUpdate(GameState& state, bool& hasSecondPlayer) {
+        if (g_clientDisconnected || IsGameOver(state)) {
+            return false;
+        }
+
+        Packet clientPacket{};
+        if (ReceivePacket(clientPacket)) {
+            HandleClientPacket(state, clientPacket, hasSecondPlayer);
+        }
+
+        ApplyFallbackAi(state, hasSecondPlayer);
+        AdvanceBall(state);
+        HandlePaddleCollisions(state);
+        HandleScoring(state);
+
+        if (!IsGameOver(state)) {
+            ++state.tick;
+        }
+
+        return true;
+    }
+} // namespace
+
+int main() {
+    ///////////////////////////////////////////////////////////////////////////
+    // TCP NETWORKING SETUP
     // WSAStartup = starts Winsock library so sockets can work on Windows
 
     WSADATA wsaData;
 
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
-    {
-        cout << "WSAStartup failed\n";
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cout << "WSAStartup failed\n";
         return 1;
     }
 
     // Create TCP listening socket
-    // AF_INET = IPv4
-    // SOCK_STREAM = TCP
-    // IPPROTO_TCP = TCP protocol
+    // AF_INET = IPv4, SOCK_STREAM = TCP
 
     SOCKET listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-    if (listenSocket == INVALID_SOCKET)
-    {
-        cout << "Socket creation failed. Error: " << WSAGetLastError() << "\n";
+    if (listenSocket == INVALID_SOCKET) {
+        std::cout << "Socket creation failed. Error: " << WSAGetLastError() << "\n";
         WSACleanup();
         return 1;
     }
 
-    // Server address
     // INADDR_ANY means accept connections from any IP on this PC
 
     sockaddr_in serverAddr{};
@@ -68,288 +260,70 @@ int main()
     serverAddr.sin_port = htons(Protocol::DefaultPort);
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    // bind = attach the socket to port 7777
-    // يعني السيرفر يسمع على البورت ده
-
-    if (bind(listenSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
-    {
-        cout << "Bind failed. Error: " << WSAGetLastError() << "\n";
-
+    if (bind(listenSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
+        std::cout << "Bind failed. Error: " << WSAGetLastError() << "\n";
         closesocket(listenSocket);
         WSACleanup();
         return 1;
     }
 
-    // listen = start waiting for clients
-    // TCP لازم server يعمل listen قبل accept
-
-    if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
-    {
-        cout << "Listen failed. Error: " << WSAGetLastError() << "\n";
-
+    if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR) {
+        std::cout << "Listen failed. Error: " << WSAGetLastError() << "\n";
         closesocket(listenSocket);
         WSACleanup();
         return 1;
     }
 
-    cout << "Waiting for client...\n";
+    std::cout << "Server listening on port " << Protocol::DefaultPort << "...\n";
+    std::cout << "Waiting for client...\n";
 
-    // accept = wait until client connects
-    // هنا البرنامج هيستنى client يعمل connect
+    g_clientSocket = accept(listenSocket, nullptr, nullptr);
 
-    SOCKET clientSocket = accept(listenSocket, nullptr, nullptr);
-
-    if (clientSocket == INVALID_SOCKET)
-    {
-        cout << "Accept failed. Error: " << WSAGetLastError() << "\n";
-
+    if (g_clientSocket == INVALID_SOCKET) {
+        std::cout << "Accept failed. Error: " << WSAGetLastError() << "\n";
         closesocket(listenSocket);
         WSACleanup();
         return 1;
     }
 
-    cout << "Client connected!\n";
+    std::cout << "Client connected!\n";
 
-    // We do not need listenSocket anymore after one client connected
-    // عشان احنا بنعمل client واحد بس دلوقتي
-
+    // We only accept one client; listening socket no longer needed.
     closesocket(listenSocket);
 
-    // Make client socket non-blocking
-    // يعني البرنامج مش هيقف يستنى رسالة
-    // لو مفيش رسالة، يكمل عادي
-
+    // Make client socket non-blocking so recv/send don't stall the game loop.
     u_long mode = 1;
-    ioctlsocket(clientSocket, FIONBIO, &mode);
+    ioctlsocket(g_clientSocket, FIONBIO, &mode);
 
-    ///////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+    // GAME LOOP
 
-    bool gameRunning = true;
-    int moveDirection = 0; // the player idle state or no movement
+    using namespace Protocol;
 
-    ///////////////////////////////////////////////////////////////////////////////////////////
+    GameState globalState = CreateInitialGameState();
+    uint32_t nextBroadcastSequence = 0;
+    bool hasSecondPlayer = false;
 
-    Protocol::PlayerInput input;
-    Protocol::GameState SCORE_OF_GAME;
+    std::cout << "Server started (player 2 falls back to AI if no second input).\n";
 
-    // Initial game state
-    SCORE_OF_GAME.ballX = 400;
-    SCORE_OF_GAME.ballY = 300;
-    SCORE_OF_GAME.leftPaddleY = 250;
-    SCORE_OF_GAME.rightPaddleY = 250;
-    SCORE_OF_GAME.leftScore = 0;
-    SCORE_OF_GAME.rightScore = 0;
-
-    ///////////////////////////////////////////////////////////////////////////////////////////
-
-    DWORD lastSendTime = GetTickCount(); // gives current time in milliseconds --> THE GetTickCount (premade)
-    const DWORD sendInterval = 16;       // server sends state about 60 FPS
-
-    ///////////////////////////////////////////////////////////////////////////////////////////
-
-    while (gameRunning)
-    {
-        ///////////////////////////////////////////////////////////////////////////////////////
-        // REAL TCP RECEIVE
-        // Server receives input packet from client
-
-        Protocol::InputPacket inputPacket;
-
-        int bytesReceived = recv(
-            clientSocket,
-            reinterpret_cast<char*>(&inputPacket),
-            sizeof(inputPacket),
-            0
-        );
-
-        if (bytesReceived == sizeof(inputPacket) &&
-            inputPacket.type == Protocol::PacketType::Input)
-        {
-            input = inputPacket.input;
-
-            if (state == MatchState::WAITING)
-            {
-                state = MatchState::IN_PROGRESS;
-                cout << "Game started from server side!\n";
-            }
-        }
-        else if (bytesReceived == 0)
-        {
-            cout << "Client disconnected\n";
-            gameRunning = false;
-        }
-        else if (bytesReceived == SOCKET_ERROR)
-        {
-            int error = WSAGetLastError();
-
-            // WSAEWOULDBLOCK means no data arrived right now
-            // عادي جدا لأننا عاملين socket non-blocking
-
-            if (error != WSAEWOULDBLOCK)
-            {
-                cout << "recv failed. Error: " << error << "\n";
-                gameRunning = false;
-            }
-        }
-
-        ///////////////////////////////////////////////////////////////////////////////////////
-
-        if (state == MatchState::IN_PROGRESS)
-        {
-            // direction
-
-            if (input.up == true && input.down == false)
-            {
-                moveDirection = 1; // move up
-            }
-            else if (input.down == true && input.up == false)
-            {
-                moveDirection = -1; // move down
-            }
-            else
-            {
-                moveDirection = 0; // no movement
-            }
-
-            // update paddle movement immediately
-
-            if (moveDirection == 1)
-            {
-                SCORE_OF_GAME.leftPaddleY -= 5;
-            }
-            else if (moveDirection == -1)
-            {
-                SCORE_OF_GAME.leftPaddleY += 5;
-            }
-
-            // simple boundaries so paddle doesnt leave the screen
-
-            if (SCORE_OF_GAME.leftPaddleY < 0)
-            {
-                SCORE_OF_GAME.leftPaddleY = 0;
-            }
-
-            if (SCORE_OF_GAME.leftPaddleY > 500)
-            {
-                SCORE_OF_GAME.leftPaddleY = 500;
-            }
-
-            // fake ball movement just to prove state packets return to client
-            // later replace this with your real pong ball logic
-
-            SCORE_OF_GAME.ballX += 2;
-
-            if (SCORE_OF_GAME.ballX > 800)
-            {
-                SCORE_OF_GAME.ballX = 0;
-            }
-
-            // Game over test
-
-            if (SCORE_OF_GAME.leftScore >= WIN_SCORE || SCORE_OF_GAME.rightScore >= WIN_SCORE)
-            {
-                state = MatchState::GAME_OVER;
-            }
-        }
-        else if (state == MatchState::GAME_OVER)
-        {
-            cout << "Game Over! Score: " << SCORE_OF_GAME.leftScore << "\n";
-            cout << "Game Over! Score: " << SCORE_OF_GAME.rightScore << "\n";
-
-            // wait for RESET signal from client later
-        }
-        else if (state == MatchState::RESET)
-        {
-            // clear scores and positions locally
-
-            SCORE_OF_GAME.leftScore = 0;
-            SCORE_OF_GAME.rightScore = 0;
-
-            SCORE_OF_GAME.ballX = 400;
-            SCORE_OF_GAME.ballY = 300;
-            SCORE_OF_GAME.leftPaddleY = 250;
-            SCORE_OF_GAME.rightPaddleY = 250;
-
-            moveDirection = 0;
-            input.up = false;
-            input.down = false;
-
-            // مفيش حركه فوق او تحت كله ثابت حتى بدايه الجيم الجاي
-
-            cout << "Restarting...\n";
-
-            state = MatchState::WAITING;
-        }
-
-        // step 3: send state every 16 ms
-
-        DWORD currentTime = GetTickCount();
-
-        if (currentTime - lastSendTime >= sendInterval)
-        {
-            lastSendTime = currentTime;
-
-            ///////////////////////////////////////////////////////////////////////////////////
-            // REAL TCP SEND
-            // Server sends game state back to client
-
-            Protocol::StatePacket statePacket;
-            statePacket.type = Protocol::PacketType::State;
-            statePacket.state = SCORE_OF_GAME;
-
-            int bytesSent = send(
-                clientSocket,
-                reinterpret_cast<const char*>(&statePacket),
-                sizeof(statePacket),
-                0
-            );
-
-            if (bytesSent == SOCKET_ERROR)
-            {
-                int error = WSAGetLastError();
-
-                // WSAEWOULDBLOCK means socket is not ready right now
-                // ده عادي مع non-blocking socket
-
-                if (error != WSAEWOULDBLOCK)
-                {
-                    cout << "send failed. Error: " << error << "\n";
-                    gameRunning = false;
-                }
-            }
-
-            ///////////////////////////////////////////////////////////////////////////////////
-        }
-
-        /*
-            Purpose of this whole thing:
-            To control how often you send state to the client.
-        */
-
-        //////////////////////////////
-        // 🔹 Print to test
-
-        cout << "Up: " << input.up
-            << " Down: " << input.down
-            << " moving direction " << moveDirection
-            << " | BallX: " << SCORE_OF_GAME.ballX
-            << " BallY: " << SCORE_OF_GAME.ballY
-            << " Left Paddle: " << SCORE_OF_GAME.leftPaddleY
-            << " Right Paddle: " << SCORE_OF_GAME.rightPaddleY
-            << "\n";
-
-        Sleep(16); // slow down output just for testing
+    while (ServerUpdate(globalState, hasSecondPlayer)) {
+        const Packet statePacket = BuildStatePacket(globalState, nextBroadcastSequence++);
+        SendPacketToAll(statePacket);
+        std::this_thread::sleep_for(std::chrono::milliseconds(FrameTimeMs));
     }
 
-    closesocket(clientSocket);
+    std::cout << "Game over. Final score: "
+              << globalState.score[0] << " - " << globalState.score[1] << "\n";
+
+    closesocket(g_clientSocket);
     WSACleanup();
 
     return 0;
 }
 
 /*
-    GetTickCount()
-    returns time in milliseconds
+    GetTickCount() / std::this_thread::sleep_for()
+    Used for frame timing.
 
     DWORD ≈ unsigned int
 */
