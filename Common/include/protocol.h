@@ -1,3 +1,30 @@
+//#pragma once
+//#include <cstdint>
+//namespace Protocol
+//{
+//    constexpr int DefaultPort = 7777;
+//
+//    enum class PacketType : uint8_t
+//    {
+//        Unknown = 0,
+//        Input,
+//        State
+//    };
+//
+//    struct PlayerInput
+//    {
+//        bool up = false;//0 = the  original state  so it doesnt move when we start game
+//        bool down = false;//0 = the  original state so it doesnt move when we start game
+//    };
+//
+//    struct GameState
+//    {
+//        float ballX, ballY;
+//        float leftPaddleY, rightPaddleY;
+//        int leftScore, rightScore;
+//    };
+//}
+
 #pragma once
 #include <cstdint>
 #include <cstddef>
@@ -14,6 +41,7 @@ namespace Protocol {
     // -------------------------------------------------------------------------
     // Shared gameplay/network constants (single source of truth)
     // -------------------------------------------------------------------------
+    constexpr int DefaultPort = 7777;
     constexpr float ArenaWidth = 800.0f;
     constexpr float ArenaHeight = 600.0f;
     constexpr float PaddleSpeed = 5.0f;

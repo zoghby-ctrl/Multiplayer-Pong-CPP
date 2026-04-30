@@ -1,3 +1,8 @@
+#define WIN32_LEAN_AND_MEAN
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h> // for GetAsyncKeyState
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -9,10 +14,10 @@
 #include "../../Common/include/protocol.h"
 
 #ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <GL/gl.h>
 #endif
+
+#pragma comment(lib, "ws2_32.lib")
 
 namespace {
 using namespace Protocol;
@@ -26,17 +31,11 @@ constexpr int kBallCircleSegments = 24;
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kBallCircleSegmentAngle = (2.0f * kPi) / static_cast<float>(kBallCircleSegments);
 
-#ifdef _WIN32
-#define CLIENT_UNUSED
-#else
-#define CLIENT_UNUSED [[maybe_unused]]
-#endif
+// TCP server socket — set in main() after connect()
+SOCKET g_serverSocket = INVALID_SOCKET;
+bool g_serverDisconnected = false;
 
-struct DemoStateFeed {
-    GameState state{};
-};
-
-GameState CreateInitialDemoState() {
+GameState CreateInitialState() {
     GameState state{};
     state.status = MatchStatus::InProgress;
     state.players[0].x = 20.0f;
@@ -50,104 +49,61 @@ GameState CreateInitialDemoState() {
     return state;
 }
 
-void ResetDemoBall(GameState& state, float directionX) {
-    state.ball.x = ArenaWidth * 0.5f;
-    state.ball.y = ArenaHeight * 0.5f;
-    state.ball.vx = directionX * BallInitialSpeedX;
-    state.ball.vy = BallInitialSpeedY;
-}
-
-void AdvanceDemoState(DemoStateFeed& feed) {
-    if (feed.state.status == MatchStatus::GameOver) {
-        return;
-    }
-
-    ++feed.state.tick;
-
-    const float paddleTrackSpeed = PaddleSpeed * 0.75f;
-    if (feed.state.ball.y < feed.state.players[0].y) {
-        feed.state.players[0].y -= paddleTrackSpeed;
-    } else {
-        feed.state.players[0].y += paddleTrackSpeed;
-    }
-
-    if (feed.state.ball.y > feed.state.players[1].y) {
-        feed.state.players[1].y += paddleTrackSpeed;
-    } else {
-        feed.state.players[1].y -= paddleTrackSpeed;
-    }
-
-    feed.state.players[0].y = std::clamp(feed.state.players[0].y, PaddleHalfHeight, ArenaHeight - PaddleHalfHeight);
-    feed.state.players[1].y = std::clamp(feed.state.players[1].y, PaddleHalfHeight, ArenaHeight - PaddleHalfHeight);
-
-    feed.state.ball.x += feed.state.ball.vx;
-    feed.state.ball.y += feed.state.ball.vy;
-
-    if (feed.state.ball.y <= kBallRadius || feed.state.ball.y >= ArenaHeight - kBallRadius) {
-        feed.state.ball.vy *= -1.0f;
-        feed.state.ball.y = std::clamp(feed.state.ball.y, kBallRadius, ArenaHeight - kBallRadius);
-    }
-
-    const auto paddleCollision = [&](std::size_t index) {
-        const float paddleLeft = feed.state.players[index].x - kPaddleHalfWidth;
-        const float paddleRight = feed.state.players[index].x + kPaddleHalfWidth;
-        const float paddleTop = feed.state.players[index].y - PaddleHalfHeight;
-        const float paddleBottom = feed.state.players[index].y + PaddleHalfHeight;
-        return feed.state.ball.x + kBallRadius >= paddleLeft &&
-               feed.state.ball.x - kBallRadius <= paddleRight &&
-               feed.state.ball.y + kBallRadius >= paddleTop &&
-               feed.state.ball.y - kBallRadius <= paddleBottom;
-    };
-
-    if (feed.state.ball.vx < 0.0f && paddleCollision(0)) {
-        feed.state.ball.vx = std::abs(feed.state.ball.vx);
-        feed.state.ball.x = feed.state.players[0].x + kPaddleHalfWidth + kBallRadius;
-    } else if (feed.state.ball.vx > 0.0f && paddleCollision(1)) {
-        feed.state.ball.vx = -std::abs(feed.state.ball.vx);
-        feed.state.ball.x = feed.state.players[1].x - kPaddleHalfWidth - kBallRadius;
-    }
-
-    if (feed.state.ball.x + kBallRadius < 0.0f) {
-        ++feed.state.score[1];
-        ResetDemoBall(feed.state, 1.0f);
-    } else if (feed.state.ball.x - kBallRadius > ArenaWidth) {
-        ++feed.state.score[0];
-        ResetDemoBall(feed.state, -1.0f);
-    }
-
-    if (feed.state.score[0] >= WinningScore || feed.state.score[1] >= WinningScore) {
-        feed.state.status = MatchStatus::GameOver;
-    }
-}
-
-CLIENT_UNUSED Packet BuildInputPacket(uint32_t sequence) {
+// Build an input packet from the current keyboard state.
+// W/S   controls player 1 (up/down)
+// ↑/↓   controls player 2 (left/right fields, for second paddle)
+Packet BuildInputPacket(uint32_t sequence) {
     Packet packet{};
     packet.header.type = PacketType::Input;
     packet.header.seq = sequence;
-
-#ifdef _WIN32
-    packet.payload.input.up = (GetAsyncKeyState('W') & 0x8000) ? 1 : 0;
-    packet.payload.input.down = (GetAsyncKeyState('S') & 0x8000) ? 1 : 0;
-    packet.payload.input.left = (GetAsyncKeyState(VK_UP) & 0x8000) ? 1 : 0;
-    packet.payload.input.right = (GetAsyncKeyState(VK_DOWN) & 0x8000) ? 1 : 0;
-#endif
-
+    packet.payload.input.up    = (GetAsyncKeyState('W')    & 0x8000) ? 1 : 0;
+    packet.payload.input.down  = (GetAsyncKeyState('S')    & 0x8000) ? 1 : 0;
+    packet.payload.input.left  = (GetAsyncKeyState(VK_UP)  & 0x8000) ? 1 : 0;
+    packet.payload.input.right = (GetAsyncKeyState(VK_DOWN)& 0x8000) ? 1 : 0;
     return packet;
 }
 
-CLIENT_UNUSED void SendPacketToServer(const Packet& packet) {
-    (void)packet;
+// Real TCP send to server.
+void SendPacketToServer(const Packet& packet) {
+    int bytesSent = send(
+        g_serverSocket,
+        reinterpret_cast<const char*>(&packet),
+        sizeof(packet),
+        0
+    );
+    if (bytesSent == SOCKET_ERROR) {
+        int error = WSAGetLastError();
+        if (error != WSAEWOULDBLOCK) {
+            std::cout << "send failed. Error: " << error << "\n";
+            g_serverDisconnected = true;
+        }
+    }
 }
 
-CLIENT_UNUSED bool ReceiveFromServer(Packet& packet) {
-    static DemoStateFeed demoFeed{CreateInitialDemoState()};
-
+// Real TCP receive from server.
+bool ReceiveFromServer(Packet& packet) {
     packet = {};
-    packet.header.type = PacketType::State;
-    packet.header.seq = demoFeed.state.tick;
-    packet.payload.state = demoFeed.state;
-    AdvanceDemoState(demoFeed);
-    return true;
+    int bytesReceived = recv(
+        g_serverSocket,
+        reinterpret_cast<char*>(&packet),
+        sizeof(packet),
+        0
+    );
+    if (bytesReceived == static_cast<int>(sizeof(packet))) {
+        return true;
+    }
+    if (bytesReceived == 0) {
+        std::cout << "Server disconnected\n";
+        g_serverDisconnected = true;
+    } else if (bytesReceived == SOCKET_ERROR) {
+        int error = WSAGetLastError();
+        // WSAEWOULDBLOCK is normal on a non-blocking socket with no data.
+        if (error != WSAEWOULDBLOCK) {
+            std::cout << "recv failed. Error: " << error << "\n";
+            g_serverDisconnected = true;
+        }
+    }
+    return false;
 }
 
 #ifdef _WIN32
@@ -387,34 +343,98 @@ private:
     HGLRC glContext_ = nullptr;
 };
 #endif
-}
+} // namespace
 
 int main() {
+    ///////////////////////////////////////////////////////////////////////////
+    // TCP NETWORKING SETUP
+    // WSAStartup = starts Winsock library so sockets can work on Windows
+
+    WSADATA wsaData;
+
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cout << "WSAStartup failed\n";
+        return 1;
+    }
+
+    // Create TCP socket
+    // AF_INET = IPv4, SOCK_STREAM = TCP
+
+    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+    if (clientSocket == INVALID_SOCKET) {
+        std::cout << "Socket creation failed. Error: " << WSAGetLastError() << "\n";
+        WSACleanup();
+        return 1;
+    }
+
+    // Server address: 127.0.0.1 (localhost) — change to remote IP for LAN play.
+
+    sockaddr_in serverAddr{};
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(Protocol::DefaultPort);
+    inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
+
+    std::cout << "Connecting to server on port " << Protocol::DefaultPort << "...\n";
+
+    if (connect(clientSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
+        std::cout << "Connect failed. Error: " << WSAGetLastError() << "\n";
+        std::cout << "Make sure Server is running first on port " << Protocol::DefaultPort << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "Connected to server!\n";
+
+    // Make socket non-blocking so recv/send don't stall the render loop.
+    u_long mode = 1;
+    ioctlsocket(clientSocket, FIONBIO, &mode);
+
+    g_serverSocket = clientSocket;
+
+    ///////////////////////////////////////////////////////////////////////////
+    // RENDER + INPUT LOOP
+
 #ifdef _WIN32
     OpenGLRenderer renderer{};
     if (!renderer.Create()) {
         std::cerr << "Failed to initialize OpenGL window." << std::endl;
+        closesocket(g_serverSocket);
+        WSACleanup();
         return 1;
     }
 
     uint32_t nextClientSequence = 0;
-    GameState latestState = CreateInitialDemoState();
+    GameState latestState = CreateInitialState();
 
-    while (renderer.ProcessEvents()) {
+    // 1) read keyboard & send input every frame          (W/S = player1, ↑/↓ = player2)
+    // 2) receive authoritative game state from server
+    // 3) render the received state
+
+    while (renderer.ProcessEvents() && !g_serverDisconnected) {
         SendPacketToServer(BuildInputPacket(nextClientSequence++));
 
-        Packet incomingState{};
-        if (ReceiveFromServer(incomingState) && incomingState.header.type == PacketType::State) {
-            latestState = incomingState.payload.state;
+        Packet incomingPacket{};
+        if (ReceiveFromServer(incomingPacket) && incomingPacket.header.type == PacketType::State) {
+            latestState = incomingPacket.payload.state;
         }
 
         renderer.Render(latestState);
         std::this_thread::sleep_for(std::chrono::milliseconds(FrameTimeMs));
     }
-
-    return 0;
 #else
     std::cerr << "OpenGL client renderer requires a Windows build environment." << std::endl;
-    return 0;
 #endif
+
+    closesocket(g_serverSocket);
+    WSACleanup();
+
+    return 0;
 }
+
+/*
+    W / S        — move player 1 paddle up / down
+    Arrow Up/Down — move player 2 paddle up / down
+    Close window  — exit
+*/
