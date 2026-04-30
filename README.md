@@ -1,149 +1,95 @@
 # Multiplayer Pong C++
 
-A collaborative C++ client-server Pong project with shared protocol definitions for multiplayer gameplay.
+A playable Windows C++ multiplayer Pong project using:
 
-The canonical entrypoint for active development is `MultiplayerPong/MultiplayerPong.sln`.
+- `Client`: OpenGL window, keyboard input, TCP client, rendering
+- `Server`: authoritative TCP server, player slots, game simulation
+- `Common`: shared packet protocol and gameplay model
 
-## Project Overview
+The canonical solution is `MultiplayerPong/MultiplayerPong.sln`.
 
-The repository is split into three core modules:
+## Features
 
-- **Client** (`/Client`): handles presentation, HUD rendering, and client-side input/network flow.
-- **Server** (`/Server`): runs authoritative game simulation, ball/paddle updates, and scoring.
-- **Common** (`/Common`): contains shared protocol/data structures used by both client and server (`Common/include/protocol.h`).
+- Real client/server communication over TCP on port `7777`
+- One or two clients supported
+- Player 2 uses AI fallback until a second client joins
+- Reset and difficulty selection from the client menu
+- OpenGL client renderer with letterboxed scaling, glow, ball trail, score display, and smooth court visuals
+- Shared binary protocol with compile-time layout checks
+- OOP structure using abstract interfaces, inheritance, and polymorphism:
+  - `IClientTransport` -> TCP client transport
+  - `IRenderer` -> OpenGL renderer
+  - `IGameMode` -> `ClassicPongMode`
+  - `IInputSource` -> human, AI, and idle input sources
+  - `IGameObject` -> paddle and ball entities
 
-## Current Active State
+## Build
 
-The active solution currently demonstrates:
+1. Open `MultiplayerPong/MultiplayerPong.sln` in Visual Studio 2022.
+2. Select `Debug` and `x64`.
+3. Build the solution.
 
-- shared packet/types in `Common`
-- a console client HUD that renders a scripted server-state feed
-- a local server simulation with AI fallback for paddle two
+The project uses Windows libraries already available with Visual Studio:
 
-The active `Client` and `Server` projects still use transport stubs. Real socket networking is not implemented in this repo revision yet.
-
-## Active vs Experimental
-
-### Active code
-
-- `MultiplayerPong/MultiplayerPong.sln`
-- `Client/`
-- `Server/`
-- `Common/`
-- `Docs/`
-
-### Experimental or reference-only code
-
-- Root-level `main.cpp`, `Game.cpp`, `DebugOverlay.*`, and `Include/*`
-- `Solution1/`
-
-These paths are kept for reference or prototyping and are not part of the primary `MultiplayerPong.sln` build.
-
-## Prerequisites
-
-Before building, install:
-
-- **Visual Studio 2022**
-- **Desktop development with C++** workload (MSVC v143 toolset)
-- **Git**
-- **GitHub Desktop** (optional, for GUI-based cloning and branch management)
-
-## Clone the Repository
-
-### Option A: Git (CLI)
-
-```bash
-git clone https://github.com/zoghby-ctrl/Multiplayer-Pong-CPP.git
-cd Multiplayer-Pong-CPP
-```
-
-### Option B: GitHub Desktop (optional)
-
-1. Open **GitHub Desktop**.
-2. Go to **File -> Clone repository...**.
-3. Select the URL tab and paste: `https://github.com/zoghby-ctrl/Multiplayer-Pong-CPP.git`.
-4. Choose a local path and clone.
-
-## Branch Workflow
-
-Use `develop` as the integration branch:
-
-1. Checkout `develop` and pull latest updates.
-2. Create a feature branch from `develop` (for example: `feature/readme-update`).
-3. Commit and push your branch.
-4. Open a Pull Request back into `**develop`**.
-
-Example:
-
-```bash
-git checkout develop
-git pull
-git checkout -b feature/your-task-name
-```
-
-## Build (Visual Studio 2022)
-
-1. Open `MultiplayerPong/MultiplayerPong.sln`.
-2. Set **Solution Configuration** to `Debug`.
-3. Set **Solution Platform** to `x64`.
-4. Build the solution with **Ctrl+Shift+B** (or Build -> Build Solution).
+- `ws2_32.lib` for WinSock networking
+- `opengl32.lib` for OpenGL rendering
 
 ## Run
 
-Start the server first, then the client.
+Start the server first:
 
-### Practical launch flow (recommended)
-
-1. In Solution Explorer, right-click **Server** -> **Set as Startup Project**.
-2. Start server (`F5` or **Debug -> Start Debugging**).
-3. Start a second instance for the client:
-  - right-click **Client** -> **Debug -> Start New Instance**, or
-  - stop and switch startup project to **Client**, then run.
-
-This order matches the intended future network flow and keeps the current demo startup sequence consistent.
-
-### What to expect from the active solution
-
-- `Server` runs the authoritative Pong simulation.
-- When no second player input is available, the server uses AI fallback for paddle two.
-- `Client` renders a demo HUD and consumes a scripted state feed while transport is stubbed.
-
-## Prototype Controls
-
-The standalone root-level prototype (`main.cpp`) supports:
-
-- **F3**: Toggle the experimental debug overlay
-- **Q**: Quit the experimental overlay demo
-
-## Repository Structure
-
-- `/MultiplayerPong` - canonical Visual Studio solution for active development
-- `/Client` - active client project and source
-- `/Server` - active server project and source
-- `/Common` - shared protocol definitions and common code
-- `/Docs` - architecture and QA documentation
-- Root-level `.cpp/.h` files - experimental prototypes kept for reference
-- `/Solution1` - placeholder Visual Studio starter projects, not part of the main build
-
-## Troubleshooting
-
-- **Build fails on Win32/x86**: switch platform to **x64** (`Debug | x64` is the expected dev target).
-- `**protocol.h` not found**:
-  - Verify include path points to `Common/include`.
-  - In Visual Studio: **Project Properties -> C/C++ -> General -> Additional Include Directories** should include `..\\..\\Common\\include` for Client/Server projects.
-- **Server/client appear local-only**:
-  - That is expected in the current active solution.
-  - The transport layer is stubbed; the projects currently demonstrate structure and simulation flow rather than live network play.
-
-## Screenshots
-
-Add project screenshots here as they become available.
-
-Example markdown:
-
-```md
-![Client HUD while connected](Docs/images/client-hud.png)
-![Server console output](Docs/images/server-console.png)
+```powershell
+.\MultiplayerPong\x64\Debug\Server.exe
 ```
 
-Suggested location for image assets: `Docs/images/`.
+Then start one client:
+
+```powershell
+.\MultiplayerPong\x64\Debug\Client.exe
+```
+
+Start a second client to control player 2. If only one client is connected, the server controls player 2 with AI.
+
+## Controls
+
+- `W` or `Up Arrow`: move your paddle up
+- `S` or `Down Arrow`: move your paddle down
+- `R`: reset the match
+- `1`: easy difficulty
+- `2`: normal difficulty
+- `3`: hard difficulty
+- `Esc`: exit the client
+
+You can also use the client window menu:
+
+- `Game > Reset`
+- `Difficulty > Easy / Normal / Hard`
+
+The first connected client is player 1. The second connected client is player 2.
+First player to `5` wins.
+
+## Project Layout
+
+```text
+Client/
+  Client/                 Visual Studio client project
+  GameClient.h/.cpp       Client networking and state synchronization
+  src/main.cpp            OpenGL window, rendering, and input loop
+
+Common/
+  Common.vcxproj          Shared static library project
+  include/protocol.h      Packet types, constants, wire layout
+  include/gameplay.h      Shared OOP gameplay model
+
+Server/
+  Server/                 Visual Studio server project
+  GameServer.h/.cpp       Authoritative game state and match coordination
+  src/main.cpp            WinSock accept loop and broadcasting
+```
+
+## Notes For The Team
+
+- The server owns the truth. Clients send input only.
+- Do not change packet layouts casually; `protocol.h` has static asserts to catch mismatches.
+- Add future gameplay rules in `Common/include/gameplay.h` or behind `IGameMode`.
+- Add future transports behind `IClientTransport` so the client loop stays clean.

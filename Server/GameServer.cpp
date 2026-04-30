@@ -1,166 +1,92 @@
 #include "GameServer.h"
+
 #include <algorithm>
-#include <cmath>
 
 GameServer::GameServer()
-    : tick_counter_(0), should_broadcast_(false) {
-    // Initialize game state
+    : gameMode_(std::make_unique<Pong::ClassicPongMode>()) {
     ResetGame();
-    
-    // Initialize input tracking
-    current_input_[0] = {};
-    current_input_[1] = {};
-    
-    // Initialize client sequence tracking
-    client_seq_[0] = 0;
-    client_seq_[1] = 0;
-}
-
-void GameServer::ResetGame() {
-    current_state_.tick = 0;
-    current_state_.status = MatchStatus::InProgress;
-    
-    // Position players
-    current_state_.players[0].x = 20.0f;
-    current_state_.players[0].y = ArenaHeight * 0.5f;
-    current_state_.players[1].x = ArenaWidth - 20.0f;
-    current_state_.players[1].y = ArenaHeight * 0.5f;
-    
-    // Reset ball to center
-    ResetBallToCenter();
-    
-    // Reset scores
-    current_state_.score[0] = 0;
-    current_state_.score[1] = 0;
 }
 
 void GameServer::Tick() {
-    // Process physics simulation at fixed tick rate
-    UpdatePlayerInput();
-    UpdateBall();
-    CheckCollisions();
-    
-    // Determine if we should broadcast state this tick
-    should_broadcast_ = (tick_counter_ % BROADCAST_INTERVAL) == 0;
-    
-    // Increment tick counter
-    tick_counter_++;
-    current_state_.tick = tick_counter_;
+    gameMode_->Step(state_, inputs_, connectedPlayers_);
+    ++state_.tick;
 }
 
-void GameServer::ProcessClientPacket(uint8_t clientId, const Packet& packet) {
-    if (clientId >= 2) return;
-    
-    // Track sequence number for diagnostics/ordering
-    client_seq_[clientId] = packet.header.seq;
-    
-    // Process input packet
-    if (packet.header.type == PacketType::Input) {
-        current_input_[clientId] = packet.payload.input;
-    }
+void GameServer::ResetGame() {
+    inputs_.fill({});
+    gameMode_->Reset(state_);
 }
 
-void GameServer::UpdatePlayerInput() {
-    // Apply input to player 0 (left side)
-    if (current_input_[0].up) {
-        current_state_.players[0].y -= PaddleSpeed;
-    }
-    if (current_input_[0].down) {
-        current_state_.players[0].y += PaddleSpeed;
-    }
-    current_state_.players[0].y = std::clamp(
-        current_state_.players[0].y,
-        PaddleHalfHeight,
-        ArenaHeight - PaddleHalfHeight
-    );
-    
-    // Apply input to player 1 (right side)
-    if (current_input_[1].up) {
-        current_state_.players[1].y -= PaddleSpeed;
-    }
-    if (current_input_[1].down) {
-        current_state_.players[1].y += PaddleSpeed;
-    }
-    current_state_.players[1].y = std::clamp(
-        current_state_.players[1].y,
-        PaddleHalfHeight,
-        ArenaHeight - PaddleHalfHeight
-    );
+void GameServer::SetDifficulty(Protocol::Difficulty difficulty) {
+    state_.difficulty = difficulty;
+    ResetGame();
 }
 
-void GameServer::UpdateBall() {
-    // Update ball position
-    current_state_.ball.x += current_state_.ball.vx;
-    current_state_.ball.y += current_state_.ball.vy;
-    
-    // Wall collision (top/bottom)
-    if (current_state_.ball.y <= 0.0f || current_state_.ball.y >= ArenaHeight) {
-        current_state_.ball.vy *= -1.0f;
-        current_state_.ball.y = std::clamp(current_state_.ball.y, 0.0f, ArenaHeight);
+void GameServer::SetPlayerConnected(std::size_t playerId, bool connected) {
+    if (playerId >= Protocol::MaxPlayers) {
+        return;
+    }
+
+    connectedPlayers_[playerId] = connected;
+    inputs_[playerId] = {};
+
+    if (ConnectedPlayerCount() == 0) {
+        ResetGame();
     }
 }
 
-void GameServer::CheckCollisions() {
-    // Paddle collision detection
-    float new_vy = current_state_.ball.vy;
-    
-    // Check left paddle collision (player 0)
-    if (CheckPaddleCollision(current_state_.players[0], current_state_.ball, new_vy)) {
-        current_state_.ball.vx = std::abs(current_state_.ball.vx);
-        current_state_.ball.vy = new_vy;
+void GameServer::ProcessClientPacket(std::size_t playerId, const Protocol::Packet& packet) {
+    if (playerId >= Protocol::MaxPlayers) {
+        return;
     }
-    
-    // Check right paddle collision (player 1)
-    if (CheckPaddleCollision(current_state_.players[1], current_state_.ball, new_vy)) {
-        current_state_.ball.vx = -std::abs(current_state_.ball.vx);
-        current_state_.ball.vy = new_vy;
+
+    if (packet.header.type == Protocol::PacketType::Disconnect) {
+        SetPlayerConnected(playerId, false);
+        return;
     }
-    
-    // Score on out of bounds
-    if (current_state_.ball.x < 0.0f) {
-        current_state_.score[1]++;
-        ResetBallToCenter();
-    } else if (current_state_.ball.x > ArenaWidth) {
-        current_state_.score[0]++;
-        ResetBallToCenter();
+
+    if (packet.header.type == Protocol::PacketType::Command) {
+        ProcessCommand(packet.payload.command);
+        return;
     }
-    
-    // Check win condition
-    if (current_state_.score[0] >= WinningScore || 
-        current_state_.score[1] >= WinningScore) {
-        current_state_.status = MatchStatus::GameOver;
+
+    if (packet.header.type == Protocol::PacketType::Input) {
+        inputs_[playerId] = packet.payload.input;
     }
 }
 
-bool GameServer::CheckPaddleCollision(const PlayerData& paddle, const BallData& ball, float& new_vy) {
-    const float PADDLE_WIDTH = 10.0f;
-    const float PADDLE_HEIGHT = PaddleHalfHeight * 2.0f;
-    
-    // Check if ball is within paddle bounds horizontally
-    float dx_left = std::abs(ball.x - paddle.x);
-    if (dx_left > PADDLE_WIDTH + 5.0f) return false; // Ball too far from paddle
-    
-    // Check if ball is within paddle bounds vertically
-    float dy = std::abs(ball.y - paddle.y);
-    if (dy > PADDLE_HEIGHT * 0.5f) return false; // Ball above/below paddle
-    
-    // Only collide if ball is moving towards paddle
-    bool moving_towards_left = paddle.x < ArenaWidth * 0.5f && ball.vx < 0.0f;
-    bool moving_towards_right = paddle.x > ArenaWidth * 0.5f && ball.vx > 0.0f;
-    
-    if (!moving_towards_left && !moving_towards_right) return false;
-    
-    // Calculate new velocity based on where ball hits paddle (top/bottom)
-    float paddle_surface_ratio = (ball.y - paddle.y) / (PADDLE_HEIGHT * 0.5f);
-    paddle_surface_ratio = std::clamp(paddle_surface_ratio, -1.0f, 1.0f);
-    new_vy = paddle_surface_ratio * 3.0f;
-    
-    return true;
+void GameServer::ProcessCommand(const Protocol::ClientCommand& command) {
+    if (command.type == Protocol::ClientCommandType::ResetMatch) {
+        ResetGame();
+        return;
+    }
+
+    if (command.type == Protocol::ClientCommandType::SetDifficulty) {
+        SetDifficulty(command.difficulty);
+    }
 }
 
-void GameServer::ResetBallToCenter() {
-    current_state_.ball.x = ArenaWidth * 0.5f;
-    current_state_.ball.y = ArenaHeight * 0.5f;
-    current_state_.ball.vx = (current_state_.score[0] > current_state_.score[1]) ? BallInitialSpeedX : -BallInitialSpeedX;
-    current_state_.ball.vy = BallInitialSpeedY;
+Protocol::Packet GameServer::BuildStatePacket(uint32_t sequence) const {
+    Protocol::Packet packet{};
+    packet.header.type = Protocol::PacketType::State;
+    packet.header.seq = sequence;
+    packet.payload.state = state_;
+    return packet;
+}
+
+Protocol::Packet GameServer::BuildWelcomePacket(std::size_t playerId, uint32_t sequence) const {
+    Protocol::Packet packet{};
+    packet.header.type = Protocol::PacketType::Welcome;
+    packet.header.seq = sequence;
+    packet.payload.welcome.playerId = static_cast<uint8_t>(std::min<std::size_t>(playerId, Protocol::MaxPlayers - 1));
+    packet.payload.welcome.playerCount = Protocol::MaxPlayers;
+    return packet;
+}
+
+bool GameServer::IsPlayerConnected(std::size_t playerId) const {
+    return playerId < Protocol::MaxPlayers && connectedPlayers_[playerId];
+}
+
+std::size_t GameServer::ConnectedPlayerCount() const {
+    return static_cast<std::size_t>(std::count(connectedPlayers_.begin(), connectedPlayers_.end(), true));
 }
